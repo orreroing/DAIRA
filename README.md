@@ -2,8 +2,6 @@
 
 **DAIRA** is an automated repair framework that deeply integrates dynamic analysis into the agent decision loop. By adopting a **Test Tracing-Driven workflow** and equipping agents with **"Perspective Glasses"** (Dynamic Observability), DAIRA mitigates the issue of blind exploration common in existing static analysis-based approaches.
 
-This repository contains the replication package for our paper, including source code, experimental data on **SWE-bench**, and detailed ablation studies.
-
 ## 📂 Repository Structure
 
 ### 🏗️ Project Overview
