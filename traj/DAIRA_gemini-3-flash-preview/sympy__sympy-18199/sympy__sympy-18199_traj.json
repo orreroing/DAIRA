@@ -1,0 +1,248 @@
+[
+    {
+        "step": 1,
+        "thought": "",
+        "action": "grep -r \"nthroot_mod\" /testbed",
+        "observation": "OBSERVATION:\n/testbed/sympy/ntheory/__init__.py:    primitive_root, nthroot_mod, is_nthpow_residue, sqrt_mod_iter, mobius, \\\n/testbed/sympy/ntheory/__init__.py:    'primitive_root', 'nthroot_mod', 'is_nthpow_residue', 'sqrt_mod_iter',\n/testbed/sympy/ntheory/residue_ntheory.py:def _nthroot_mod2(s, q, p):\n/testbed/sympy/ntheory/residue_ntheory.py:        s = _nthroot_mod1(s, qx, p, False)\n/testbed/sympy/ntheory/residue_ntheory.py:def _nthroot_mod1(s, q, p, all_roots):\n/testbed/sympy/ntheory/residue_ntheory.py:        r = _nthroot_mod2(s, q, p)\n/testbed/sympy/ntheory/residue_ntheory.py:def nthroot_mod(a, n, p, all_roots=False):\n/testbed/sympy/ntheory/residue_ntheory.py:    >>> from sympy.ntheory.residue_ntheory import nthroot_mod\n/testbed/sympy/ntheory/residue_ntheory.py:    >>> nthroot_mod(11, 4, 19)\n/testbed/sympy/ntheory/residue_ntheory.py:    >>> nthroot_mod(11, 4, 19, True)\n/testbed/sympy/ntheory/residue_ntheory.py:    >>> nthroot_mod(68, 3, 109)\n/testbed/sympy/ntheory/residue_ntheory.py:        return _nthroot_mod1(a, n, p, all_roots)\n/testbed/sympy/ntheory/residue_ntheory.py:        res = _nthroot_mod1(a, pa, p, all_roots)\n/testbed/sympy/ntheory/tests/test_residue.py:    primitive_root, quadratic_residues, is_nthpow_residue, nthroot_mod, \\\n/testbed/sympy/ntheory/tests/test_residue.py:    raises(NotImplementedError, lambda: nthroot_mod(29, 31, 74))\n/testbed/sympy/ntheory/tests/test_residue.py:    assert nthroot_mod(1801, 11, 2663) == 44\n/testbed/sympy/ntheory/tests/test_residue.py:        r = nthroot_mod(a, q, p)\n/testbed/sympy/ntheory/tests/test_residue.py:    assert nthroot_mod(11, 3, 109) is None\n/testbed/sympy/ntheory/tests/test_residue.py:    raises(NotImplementedError, lambda: nthroot_mod(16, 5, 36))\n/testbed/sympy/ntheory/tests/test_residue.py:    raises(NotImplementedError, lambda: nthroot_mod(9, 16, 36))\n/testbed/sympy/ntheory/tests/test_residue.py:                res = nthroot_mod(a, q, p, True)\n/testbed/sympy/solvers/solveset.py:from sympy.ntheory.residue_ntheory import discrete_log, nthroot_mod\n/testbed/sympy/solvers/solveset.py:          primitive solutions list with the help of nthroot_mod function.\n/testbed/sympy/solvers/solveset.py:          from nthroot_mod function.\n/testbed/sympy/solvers/solveset.py:                remainder_list = nthroot_mod(rhs, expo, m, all_roots=True)\n/testbed/doc/src/modules/ntheory.rst:.. autofunction:: nthroot_mod"
+    },
+    {
+        "step": 2,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/reproduce_issue.py --file_text 'from sympy.ntheory.residue_ntheory import nthroot_mod\n\ndef reproduce():\n    a = 17*17\n    n = 5\n    p = 17\n    print(f\"Testing nthroot_mod({a}, {n}, {p})\")\n    root = nthroot_mod(a, n, p)\n    print(f\"Result: {root}\")\n    \n    if root is None or (root**n % p != a % p):\n        print(\"Issue reproduced: 0 is a root but it was not returned.\")\n    else:\n        print(\"Issue not reproduced.\")\n\n    print(f\"Testing nthroot_mod({a}, {n}, {p}, all_roots=True)\")\n    roots = nthroot_mod(a, n, p, all_roots=True)\n    print(f\"Result: {roots}\")\n    if 0 not in roots:\n        print(\"Issue reproduced: 0 is not in the list of roots.\")\n\nif __name__ == \"__main__\":\n    reproduce()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/reproduce_issue.py"
+    },
+    {
+        "step": 3,
+        "thought": "",
+        "action": "timeout 90s python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\nTesting nthroot_mod(289, 5, 17)\nResult: 0\nIssue not reproduced.\nTesting nthroot_mod(289, 5, 17, all_roots=True)\nResult: [0]"
+    },
+    {
+        "step": 4,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/ntheory/residue_ntheory.py  --view_range 730 780",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/ntheory/residue_ntheory.py:\n   730\t        g3 = igcdex(g2, p)[0]\n   731\t        r = r1*g3 % p\n   732\t        #assert pow(r, q, p) == s\n   733\t    res = [r]\n   734\t    h = pow(g, (p - 1) // q, p)\n   735\t    #assert pow(h, q, p) == 1\n   736\t    hx = r\n   737\t    for i in range(q - 1):\n   738\t        hx = (hx*h) % p\n   739\t        res.append(hx)\n   740\t    if all_roots:\n   741\t        res.sort()\n   742\t        return res\n   743\t    return min(res)\n   744\t\n   745\t\n   746\tdef nthroot_mod(a, n, p, all_roots=False):\n   747\t    \"\"\"\n   748\t    Find the solutions to ``x**n = a mod p``\n   749\t\n   750\t    Parameters\n   751\t    ==========\n   752\t\n   753\t    a : integer\n   754\t    n : positive integer\n   755\t    p : positive integer\n   756\t    all_roots : if False returns the smallest root, else the list of roots\n   757\t\n   758\t    Examples\n   759\t    ========\n   760\t\n   761\t    >>> from sympy.ntheory.residue_ntheory import nthroot_mod\n   762\t    >>> nthroot_mod(11, 4, 19)\n   763\t    8\n   764\t    >>> nthroot_mod(11, 4, 19, True)\n   765\t    [8, 11]\n   766\t    >>> nthroot_mod(68, 3, 109)\n   767\t    23\n   768\t    \"\"\"\n   769\t    from sympy.core.numbers import igcdex\n   770\t    a, n, p = as_int(a), as_int(n), as_int(p)\n   771\t    if n == 2:\n   772\t        return sqrt_mod(a, p, all_roots)\n   773\t    # see Hackman \"Elementary Number Theory\" (2009), page 76\n   774\t    if not is_nthpow_residue(a, n, p):\n   775\t        return None\n   776\t    if not isprime(p):\n   777\t        raise NotImplementedError(\"Not implemented for composite p\")\n   778\t\n   779\t    if (p - 1) % n == 0:\n   780\t        return _nthroot_mod1(a, n, p, all_roots)"
+    },
+    {
+        "step": 5,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/ntheory/residue_ntheory.py  --view_range 746 800",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/ntheory/residue_ntheory.py:\n   746\tdef nthroot_mod(a, n, p, all_roots=False):\n   747\t    \"\"\"\n   748\t    Find the solutions to ``x**n = a mod p``\n   749\t\n   750\t    Parameters\n   751\t    ==========\n   752\t\n   753\t    a : integer\n   754\t    n : positive integer\n   755\t    p : positive integer\n   756\t    all_roots : if False returns the smallest root, else the list of roots\n   757\t\n   758\t    Examples\n   759\t    ========\n   760\t\n   761\t    >>> from sympy.ntheory.residue_ntheory import nthroot_mod\n   762\t    >>> nthroot_mod(11, 4, 19)\n   763\t    8\n   764\t    >>> nthroot_mod(11, 4, 19, True)\n   765\t    [8, 11]\n   766\t    >>> nthroot_mod(68, 3, 109)\n   767\t    23\n   768\t    \"\"\"\n   769\t    from sympy.core.numbers import igcdex\n   770\t    a, n, p = as_int(a), as_int(n), as_int(p)\n   771\t    if n == 2:\n   772\t        return sqrt_mod(a, p, all_roots)\n   773\t    # see Hackman \"Elementary Number Theory\" (2009), page 76\n   774\t    if not is_nthpow_residue(a, n, p):\n   775\t        return None\n   776\t    if not isprime(p):\n   777\t        raise NotImplementedError(\"Not implemented for composite p\")\n   778\t\n   779\t    if (p - 1) % n == 0:\n   780\t        return _nthroot_mod1(a, n, p, all_roots)\n   781\t    # The roots of ``x**n - a = 0 (mod p)`` are roots of\n   782\t    # ``gcd(x**n - a, x**(p - 1) - 1) = 0 (mod p)``\n   783\t    pa = n\n   784\t    pb = p - 1\n   785\t    b = 1\n   786\t    if pa < pb:\n   787\t        a, pa, b, pb = b, pb, a, pa\n   788\t    while pb:\n   789\t        # x**pa - a = 0; x**pb - b = 0\n   790\t        # x**pa - a = x**(q*pb + r) - a = (x**pb)**q * x**r - a =\n   791\t        #             b**q * x**r - a; x**r - c = 0; c = b**-q * a mod p\n   792\t        q, r = divmod(pa, pb)\n   793\t        c = pow(b, q, p)\n   794\t        c = igcdex(c, p)[0]\n   795\t        c = (c * a) % p\n   796\t        pa, pb = pb, r\n   797\t        a, b = b, c\n   798\t    if pa == 1:\n   799\t        if all_roots:\n   800\t            res = [a]"
+    },
+    {
+        "step": 6,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/ntheory/residue_ntheory.py  --view_range 1080 1110",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/ntheory/residue_ntheory.py:\n  1080\t    ==========\n  1081\t\n  1082\t    .. [1] \"Handbook of applied cryptography\", Menezes, A. J., Van, O. P. C., &\n  1083\t        Vanstone, S. A. (1997).\n  1084\t    \"\"\"\n  1085\t    a %= n\n  1086\t    b %= n\n  1087\t    if order is None:\n  1088\t        order = n_order(b, n)\n  1089\t    m = isqrt(order) + 1\n  1090\t    T = dict()\n  1091\t    x = 1\n  1092\t    for i in range(m):\n  1093\t        T[x] = i\n  1094\t        x = x * b % n\n  1095\t    z = mod_inverse(b, n)\n  1096\t    z = pow(z, m, n)\n  1097\t    x = a\n  1098\t    for i in range(m):\n  1099\t        if x in T:\n  1100\t            return i * m + T[x]\n  1101\t        x = x * z % n\n  1102\t    raise ValueError(\"Log does not exist\")\n  1103\t\n  1104\t\n  1105\tdef _discrete_log_pollard_rho(n, a, b, order=None, retries=10, rseed=None):\n  1106\t    \"\"\"\n  1107\t    Pollard's Rho algorithm for computing the discrete logarithm of ``a`` to\n  1108\t    the base ``b`` modulo ``n``.\n  1109\t\n  1110\t    It is a randomized algorithm with the same expected running time as"
+    },
+    {
+        "step": 7,
+        "thought": "",
+        "action": "grep -n \"def is_nthpow_residue\" /testbed/sympy/ntheory/residue_ntheory.py",
+        "observation": "OBSERVATION:\n620:def is_nthpow_residue(a, n, m):"
+    },
+    {
+        "step": 8,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/ntheory/residue_ntheory.py  --view_range 620 650",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/ntheory/residue_ntheory.py:\n   620\tdef is_nthpow_residue(a, n, m):\n   621\t    \"\"\"\n   622\t    Returns True if ``x**n == a (mod m)`` has solutions.\n   623\t\n   624\t    References\n   625\t    ==========\n   626\t\n   627\t    .. [1] P. Hackman \"Elementary Number Theory\" (2009), page 76\n   628\t\n   629\t    \"\"\"\n   630\t    a, n, m = as_int(a), as_int(n), as_int(m)\n   631\t    if m <= 0:\n   632\t        raise ValueError('m must be > 0')\n   633\t    if n < 0:\n   634\t        raise ValueError('n must be >= 0')\n   635\t    if a < 0:\n   636\t        raise ValueError('a must be >= 0')\n   637\t    if n == 0:\n   638\t        if m == 1:\n   639\t            return False\n   640\t        return a == 1\n   641\t    if a % m == 0:\n   642\t        return True\n   643\t    if n == 1:\n   644\t        return True\n   645\t    if n == 2:\n   646\t        return is_quad_residue(a, m)\n   647\t    return _is_nthpow_residue_bign(a, n, m)\n   648\t\n   649\t\n   650\tdef _is_nthpow_residue_bign(a, n, m):"
+    },
+    {
+        "step": 9,
+        "thought": "",
+        "action": "python -c \"from sympy.core.numbers import igcdex; print(igcdex(0, 17))\"",
+        "observation": "OBSERVATION:\n(0, 1, 17)"
+    },
+    {
+        "step": 10,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/reproduce_issue_2.py --file_text 'from sympy.ntheory.residue_ntheory import nthroot_mod\n\ndef reproduce():\n    a = 31*31\n    n = 3\n    p = 31\n    print(f\"Testing nthroot_mod({a}, {n}, {p})\")\n    root = nthroot_mod(a, n, p)\n    print(f\"Result: {root}\")\n    \n    if root is None or (root**n % p != a % p):\n        print(\"Issue reproduced: 0 is a root but it was not returned.\")\n    else:\n        print(\"Issue not reproduced.\")\n\n    print(f\"Testing nthroot_mod({a}, {n}, {p}, all_roots=True)\")\n    roots = nthroot_mod(a, n, p, all_roots=True)\n    print(f\"Result: {roots}\")\n    if roots is None or 0 not in roots:\n        print(\"Issue reproduced: 0 is not in the list of roots or result is None.\")\n\nif __name__ == \"__main__\":\n    reproduce()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/reproduce_issue_2.py"
+    },
+    {
+        "step": 11,
+        "thought": "",
+        "action": "timeout 90s python /testbed/reproduce_issue_2.py",
+        "observation": "OBSERVATION:\nTesting nthroot_mod(961, 3, 31)\nTraceback (most recent call last):\n  File \"/testbed/reproduce_issue_2.py\", line 23, in <module>\n    reproduce()\n  File \"/testbed/reproduce_issue_2.py\", line 8, in reproduce\n    root = nthroot_mod(a, n, p)\n  File \"/testbed/sympy/ntheory/residue_ntheory.py\", line 780, in nthroot_mod\n    return _nthroot_mod1(a, n, p, all_roots)\n  File \"/testbed/sympy/ntheory/residue_ntheory.py\", line 728, in _nthroot_mod1\n    t = discrete_log(p, s1, h)\n  File \"/testbed/sympy/ntheory/residue_ntheory.py\", line 1296, in discrete_log\n    return _discrete_log_trial_mul(n, a, b, order)\n  File \"/testbed/sympy/ntheory/residue_ntheory.py\", line 1056, in _discrete_log_trial_mul\n    raise ValueError(\"Log does not exist\")\nValueError: Log does not exist"
+    },
+    {
+        "step": 12,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/ntheory/residue_ntheory.py  --view_range 700 745",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/ntheory/residue_ntheory.py:\n   700\tdef _nthroot_mod1(s, q, p, all_roots):\n   701\t    \"\"\"\n   702\t    Root of ``x**q = s mod p``, ``p`` prime and ``q`` divides ``p - 1``\n   703\t\n   704\t    References\n   705\t    ==========\n   706\t\n   707\t    .. [1] A. M. Johnston \"A Generalized qth Root Algorithm\"\n   708\t\n   709\t    \"\"\"\n   710\t    g = primitive_root(p)\n   711\t    if not isprime(q):\n   712\t        r = _nthroot_mod2(s, q, p)\n   713\t    else:\n   714\t        f = p - 1\n   715\t        assert (p - 1) % q == 0\n   716\t        # determine k\n   717\t        k = 0\n   718\t        while f % q == 0:\n   719\t            k += 1\n   720\t            f = f // q\n   721\t        # find z, x, r1\n   722\t        f1 = igcdex(-f, q)[0] % q\n   723\t        z = f*f1\n   724\t        x = (1 + z) // q\n   725\t        r1 = pow(s, x, p)\n   726\t        s1 = pow(s, f, p)\n   727\t        h = pow(g, f*q, p)\n   728\t        t = discrete_log(p, s1, h)\n   729\t        g2 = pow(g, z*t, p)\n   730\t        g3 = igcdex(g2, p)[0]\n   731\t        r = r1*g3 % p\n   732\t        #assert pow(r, q, p) == s\n   733\t    res = [r]\n   734\t    h = pow(g, (p - 1) // q, p)\n   735\t    #assert pow(h, q, p) == 1\n   736\t    hx = r\n   737\t    for i in range(q - 1):\n   738\t        hx = (hx*h) % p\n   739\t        res.append(hx)\n   740\t    if all_roots:\n   741\t        res.sort()\n   742\t        return res\n   743\t    return min(res)\n   744\t\n   745"
+    },
+    {
+        "step": 13,
+        "thought": "",
+        "action": "run_hunter_trace /testbed/reproduce_issue.py sympy/ntheory/residue_ntheory.py nthroot_mod 10",
+        "observation": "OBSERVATION:\nBased on the provided trace log and target code analysis, here is the execution workflow for the `nthroot_mod` function.\n\n### 1. Initial Representation\nThe function is called to find the $n$-th root of $a$ modulo $p$.\n*   **Case 1:** $x^5 \\equiv 289 \\pmod{17}$\n*   **Case 2:** $x^5 \\equiv 289 \\pmod{17}$ (requesting all roots)\n*   **Note:** Since $289 = 17^2$, $289 \\equiv 0 \\pmod{17}$.\n\n### 2. Top-Level Call\n`nthroot_mod(a=289, n=5, p=17, all_roots=False)`\n\n### 3. Execution Tree\n\n**(Flow 1: Single Root Request)**\n```text\n(1) nthroot_mod(a=289, n=5, p=17, all_roots=False)\n│\n├── (2) is_nthpow_residue(a=289, n=5, m=17) \n│   │   # Logic Internal: Checks if a % m is an n-th power residue.\n│   │   # Since 289 % 17 == 0, and 0^5 % 17 == 0, it is a residue.\n│   └── Returns: True\n│\n├── (3) Internal Logic: Check if a % p == 0\n│   └── Observation: 289 % 17 is 0. \n│\n└── (4) Result: 0\n```\n**Final Output:** `0`\n\n---\n\n**(Flow 2: All Roots Request)**\n```text\n(1) nthroot_mod(a=289, n=5, p=17, all_roots=True)\n│\n├── (2) is_nthpow_residue(a=289, n=5, m=17)\n│   └── Returns: True\n│\n├── (3) Internal Logic: Check if a % p == 0\n│   └── Observation: 289 % 17 is 0. \n│\n└── (4) Result: Wrap root in list for all_roots=True\n```\n**Final Output:** `[0]`\n\n### 4. Key Function Analysis\n\n| Function and Location | Functional Boundary | Role in this Workflow |\n| :--- | :--- | :--- |\n| **nthroot_mod**<br>`.../residue_ntheory.py:746` | Main entry point for modular $n$-th root calculation. | Orchestrates the check for existence of roots and the calculation of those roots based on the modulus $p$ and power $n$. |\n| **is_nthpow_residue**<br>`.../residue_ntheory.py:620` | Predicate function to determine if $x^n \\equiv a \\pmod m$ has a solution. | Validates whether the calculation should proceed. In this case, it confirms that 289 is indeed an $n$-th power residue mod 17 (because $a \\equiv 0$). |\n\n### 5. Workflow Introduction\nThe workflow process begins by invoking `nthroot_mod` with the target integer $a$, power $n$, and prime modulus $p$. \n\n1.  **Validation Phase:** The function first calls `is_nthpow_residue` to ensure a solution exists. This prevents unnecessary computation if no root is mathematically possible.\n2.  **Special Case Handling:** The algorithm checks if $a \\equiv 0 \\pmod p$. If this condition is met (as it is with $289 \\pmod{17}$), the root is identified immediately as $0$, since $0^n \\equiv 0 \\pmod p$. \n3.  **Result Formatting:** Depending on the `all_roots` flag, the function either returns the base integer `0` or wraps it in a list `[0]`.\n\nIn this specific execution trace, the logic correctly identifies that $289$ is a multiple of $17$, leading to the trivial solution $0$."
+    },
+    {
+        "step": 14,
+        "thought": "",
+        "action": "run_hunter_trace /testbed/reproduce_issue_2.py sympy/ntheory/residue_ntheory.py nthroot_mod 10",
+        "observation": "OBSERVATION:\nThis report analyzes the execution flow of the `nthroot_mod` function when calculating the $n$-th root of a number $a$ modulo $p$, specifically focused on the case where $a \\equiv 0 \\pmod p$.\n\n### 1. Initial Representation\n- **Input Expression:** $x^3 \\equiv 961 \\pmod{31}$\n- **Mathematical Simplification:** Since $961 = 31^2$, the expression reduces to $x^3 \\equiv 0 \\pmod{31}$.\n\n### 2. Top-Level Call\n`nthroot_mod(a=961, n=3, p=31, all_roots=False)`\n\n### 3. Execution Tree\n```text\n(1) nthroot_mod(a=961, n=3, p=31)\n│\n├── (2) Dispatch: is_nthpow_residue(a=961, n=3, m=31)\n│   └── (3) Logic: 961 % 31 == 0; 0 is always an n-th power residue.\n│   └── Returns: True\n│\n├── (4) Delegate: _nthroot_mod1(s=961, q=3, p=31, all_roots=False)\n│   │\n│   ├── (5) Find Generator: primitive_root(p=31)\n│   │   ├── (6) _primitive_root_prime_iter(p=31)\n│   │   │   ├── (7) <listcomp>: Factorize p-1 (30 -> [15, 10, 6])\n│   │   │   └── Returns: 3 (Smallest primitive root)\n│   │   └── Returns: 3\n│   │\n│   ├── (8) Solve via Indices: discrete_log(n=31, a=961%31, b=1, ...) \n│   │   │   Note: Input 'a' becomes 0 because 961 % 31 == 0.\n│   │   │\n│   │   ├── (9) n_order(a=1, n=31)\n│   │   │   └── Returns: 1\n│   │   │\n│   │   ├── (10) _discrete_log_trial_mul(n=31, a=0, b=1, order=1)\n│   │   │   └── (11) Check: Can 1^x ≡ 0 (mod 31)? \n│   │   │   └── Raise: ValueError(\"Log does not exist\")\n│   │   │\n│   │   └── (12) Log Propagation: ValueError(\"Log does not exist\")\n│   │\n│   └── (13) Mod1 Propagation: ValueError(\"Log does not exist\")\n│\n└── (14) Main Propagation: ValueError(\"Log does not exist\")\n```\n\n### 4. Final Output\n**Final Output:** `None` (Resulting from an uncaught `ValueError: Log does not exist` within the internal `discrete_log` mechanics).\n\n---\n\n### 5. Key Function Analysis\n\n| Function and Location | Functional Boundary | Role in this Workflow |\n| :--- | :--- | :--- |\n| **`nthroot_mod`** (residue_ntheory.py:746) | Main entry point for computing $x^n \\equiv a \\pmod p$. | Orchestrates the process, checking if roots exist and dispatching to specific prime/composite solvers. |\n| **`is_nthpow_residue`** (residue_ntheory.py:620) | Determines if an integer $a$ is an $n$-th power residue modulo $m$. | Correct identifies that a solution exists (since $0^n \\equiv 0$), allowing execution to continue. |\n| **`_nthroot_mod1`** (residue_ntheory.py:700) | Specialized solver for $x^n \\equiv a \\pmod p$ where $p$ is prime. | Attempts to solve the congruence using index calculus (logarithms), but fails to handle $a \\equiv 0$ as a special case. |\n| **`primitive_root`** (residue_ntheory.py:87) | Finds the smallest primitive root (generator) modulo $p$. | Provides the base (3) for the discrete logarithm calculation. |\n| **`discrete_log`** (residue_ntheory.py:1257) | Computes $x$ such that $b^x \\equiv a \\pmod n$. | Called by `_nthroot_mod1` to find the index of $a$. It fails because the logarithm of 0 is undefined in the multiplicative group. |\n\n---\n\n### 6. Workflow Introduction\n\nThe workflow begins by attempting to find the cube root of $961$ modulo $31$. The process follows these stages:\n\n1.  **Validation:** The system first confirms that $961 \\pmod{31}$ is indeed an $n$-th power residue. Since $961 \\equiv 0 \\pmod{31}$, the answer is trivially yes.\n2.  **Algorithm Selection:** `nthroot_mod` delegates the task to `_nthroot_mod1`, which handles prime moduli.\n3.  **Primitive Root Calculation:** To solve the equation $x^n \\equiv a \\pmod p$, the algorithm attempts to transform it into a linear congruence using discrete logarithms. It identifies $3$ as the primitive root for $31$.\n4.  **The Failure Point:** The logic proceeds to call `discrete_log` to find the exponent $k$ such that $3^k \\equiv 961 \\equiv 0 \\pmod{31}$. Because $0$ is not an element of the multiplicative group $(\\mathbb{Z}/31\\mathbb{Z})^*$, the `discrete_log` function correctly identifies that no such exponent exists for a non-zero base and raises a `ValueError`.\n5.  **Error Propagation:** The `ValueError` is not handled by the parent functions, causing the entire root-finding process to crash instead of returning the obvious root $x=0$."
+    },
+    {
+        "step": 15,
+        "thought": "",
+        "action": "python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\nTesting nthroot_mod(289, 5, 17)\nResult: 0\nIssue not reproduced.\nTesting nthroot_mod(289, 5, 17, all_roots=True)\nResult: [0]"
+    },
+    {
+        "step": 16,
+        "thought": "",
+        "action": "python -c \"from sympy.ntheory.residue_ntheory import nthroot_mod; print(nthroot_mod(0, 5, 17))\"",
+        "observation": "OBSERVATION:\n0"
+    },
+    {
+        "step": 17,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/ntheory/residue_ntheory.py  --view_range 800 810",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/ntheory/residue_ntheory.py:\n   800\t            res = [a]\n   801\t        else:\n   802\t            res = a\n   803\t    elif pa == 2:\n   804\t        return sqrt_mod(a, p , all_roots)\n   805\t    else:\n   806\t        res = _nthroot_mod1(a, pa, p, all_roots)\n   807\t    return res\n   808\t\n   809\t\n   810\tdef quadratic_residues(p):"
+    },
+    {
+        "step": 18,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/ntheory/residue_ntheory.py  --view_range 385 410",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/ntheory/residue_ntheory.py:\n   385\t    .. [3] [Gathen99]_\n   386\t    \"\"\"\n   387\t    from sympy.core.numbers import igcdex\n   388\t    from sympy.polys.domains import ZZ\n   389\t\n   390\t    pk = p**k\n   391\t    a = a % pk\n   392\t\n   393\t    if k == 1:\n   394\t        if p == 2:\n   395\t            return [ZZ(a)]\n   396\t        if not (a % p < 2 or pow(a, (p - 1) // 2, p) == 1):\n   397\t            return None\n   398\t\n   399\t        if p % 4 == 3:\n   400\t            res = pow(a, (p + 1) // 4, p)\n   401\t        elif p % 8 == 5:\n   402\t            sign = pow(a, (p - 1) // 4, p)\n   403\t            if sign == 1:\n   404\t                res = pow(a, (p + 3) // 8, p)\n   405\t            else:\n   406\t                b = pow(4*a, (p - 5) // 8, p)\n   407\t                x =  (2*a*b) % p\n   408\t                if pow(x, 2, p) == a:\n   409\t                    res = x\n   410\t        else:"
+    },
+    {
+        "step": 19,
+        "thought": "",
+        "action": "python -c \"from sympy.ntheory.residue_ntheory import sqrt_mod; print(sqrt_mod(0, 17))\"",
+        "observation": "OBSERVATION:\n0"
+    },
+    {
+        "step": 20,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/ntheory/residue_ntheory.py  --view_range 410 450",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/ntheory/residue_ntheory.py:\n   410\t        else:\n   411\t            res = _sqrt_mod_tonelli_shanks(a, p)\n   412\t\n   413\t        # ``_sqrt_mod_tonelli_shanks(a, p)`` is not deterministic;\n   414\t        # sort to get always the same result\n   415\t        return sorted([ZZ(res), ZZ(p - res)])\n   416\t\n   417\t    if k > 1:\n   418\t        # see Ref.[2]\n   419\t        if p == 2:\n   420\t            if a % 8 != 1:\n   421\t                return None\n   422\t            if k <= 3:\n   423\t               s = set()\n   424\t               for i in range(0, pk, 4):\n   425\t                    s.add(1 + i)\n   426\t                    s.add(-1 + i)\n   427\t               return list(s)\n   428\t            # according to Ref.[2] for k > 2 there are two solutions\n   429\t            # (mod 2**k-1), that is four solutions (mod 2**k), which can be\n   430\t            # obtained from the roots of x**2 = 0 (mod 8)\n   431\t            rv = [ZZ(1), ZZ(3), ZZ(5), ZZ(7)]\n   432\t            # hensel lift them to solutions of x**2 = 0 (mod 2**k)\n   433\t            # if r**2 - a = 0 mod 2**nx but not mod 2**(nx+1)\n   434\t            # then r + 2**(nx - 1) is a root mod 2**(nx+1)\n   435\t            n = 3\n   436\t            res = []\n   437\t            for r in rv:\n   438\t                nx = n\n   439\t                while nx < k:\n   440\t                    r1 = (r**2 - a) >> nx\n   441\t                    if r1 % 2:\n   442\t                        r = r + (1 << (nx - 1))\n   443\t                    #assert (r**2 - a)% (1 << (nx + 1)) == 0\n   444\t                    nx += 1\n   445\t                if r not in res:\n   446\t                    res.append(r)\n   447\t                x = r + (1 << (k - 1))\n   448\t                #assert (x**2 - a) % pk == 0\n   449\t                if x < (1 << nx) and x not in res:\n   450\t                    if (x**2 - a) % pk == 0:"
+    },
+    {
+        "step": 21,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/ntheory/residue_ntheory.py  --view_range 480 520",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/ntheory/residue_ntheory.py:\n   480\t    \"\"\"\n   481\t    Find solution to ``x**2 == a mod p**n`` when ``a % p == 0``\n   482\t\n   483\t    see http://www.numbertheory.org/php/squareroot.html\n   484\t    \"\"\"\n   485\t    pn = p**n\n   486\t    a = a % pn\n   487\t    if a == 0:\n   488\t        # case gcd(a, p**k) = p**n\n   489\t        m = n // 2\n   490\t        if n % 2 == 1:\n   491\t            pm1 = p**(m + 1)\n   492\t            def _iter0a():\n   493\t                i = 0\n   494\t                while i < pn:\n   495\t                    yield i\n   496\t                    i += pm1\n   497\t            return _iter0a()\n   498\t        else:\n   499\t            pm = p**m\n   500\t            def _iter0b():\n   501\t                i = 0\n   502\t                while i < pn:\n   503\t                    yield i\n   504\t                    i += pm\n   505\t            return _iter0b()\n   506\t\n   507\t    # case gcd(a, p**k) = p**r, r < n\n   508\t    f = factorint(a)\n   509\t    r = f[p]\n   510\t    if r % 2 == 1:\n   511\t        return None\n   512\t    m = r // 2\n   513\t    a1 = a >> r\n   514\t    if p == 2:\n   515\t        if n - r == 1:\n   516\t            pnm1 = 1 << (n - m + 1)\n   517\t            pm1 = 1 << (m + 1)\n   518\t            def _iter1():\n   519\t                k = 1 << (m + 2)\n   520\t                i = 1 << m"
+    },
+    {
+        "step": 22,
+        "thought": "",
+        "action": "python -c \"from sympy.ntheory.residue_ntheory import sqrt_mod; print(sqrt_mod(0, 17, True))\"",
+        "observation": "OBSERVATION:\n[0]"
+    },
+    {
+        "step": 23,
+        "thought": "",
+        "action": "grep -n \"def _nthroot_mod2\" /testbed/sympy/ntheory/residue_ntheory.py",
+        "observation": "OBSERVATION:\n690:def _nthroot_mod2(s, q, p):"
+    },
+    {
+        "step": 24,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/ntheory/residue_ntheory.py  --view_range 690 698",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/ntheory/residue_ntheory.py:\n   690\tdef _nthroot_mod2(s, q, p):\n   691\t    f = factorint(q)\n   692\t    v = []\n   693\t    for b, e in f.items():\n   694\t        v.extend([b]*e)\n   695\t    for qx in v:\n   696\t        s = _nthroot_mod1(s, qx, p, False)\n   697\t    return s\n   698"
+    },
+    {
+        "step": 25,
+        "thought": "",
+        "action": "python -c \"from sympy.ntheory.residue_ntheory import nthroot_mod; print(nthroot_mod(17, 1, 17))\"",
+        "observation": "OBSERVATION:\n17"
+    },
+    {
+        "step": 26,
+        "thought": "",
+        "action": "python -c \"from sympy.ntheory.residue_ntheory import nthroot_mod; print(nthroot_mod(1, 0, 17))\"",
+        "observation": "OBSERVATION:\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/testbed/sympy/ntheory/residue_ntheory.py\", line 779, in nthroot_mod\n    if (p - 1) % n == 0:\nZeroDivisionError: integer division or modulo by zero"
+    },
+    {
+        "step": 27,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/sympy/ntheory/residue_ntheory.py   --old_str '    if not isprime(p):\n        raise NotImplementedError(\"Not implemented for composite p\")\n\n    if (p - 1) % n == 0:' --new_str '    if not isprime(p):\n        raise NotImplementedError(\"Not implemented for composite p\")\n\n    if a % p == 0:\n        return [0] if all_roots else 0\n\n    if (p - 1) % n == 0:'",
+        "observation": "OBSERVATION:\nThe file /testbed/sympy/ntheory/residue_ntheory.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/sympy/ntheory/residue_ntheory.py:\n   771\t    if n == 2:\n   772\t        return sqrt_mod(a, p, all_roots)\n   773\t    # see Hackman \"Elementary Number Theory\" (2009), page 76\n   774\t    if not is_nthpow_residue(a, n, p):\n   775\t        return None\n   776\t    if not isprime(p):\n   777\t        raise NotImplementedError(\"Not implemented for composite p\")\n   778\t\n   779\t    if a % p == 0:\n   780\t        return [0] if all_roots else 0\n   781\t\n   782\t    if (p - 1) % n == 0:\n   783\t        return _nthroot_mod1(a, n, p, all_roots)\n   784\t    # The roots of ``x**n - a = 0 (mod p)`` are roots of\n   785\t    # ``gcd(x**n - a, x**(p - 1) - 1) = 0 (mod p)``\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 28,
+        "thought": "",
+        "action": "python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\nTesting nthroot_mod(289, 5, 17)\nResult: 0\nIssue not reproduced.\nTesting nthroot_mod(289, 5, 17, all_roots=True)\nResult: [0]"
+    },
+    {
+        "step": 29,
+        "thought": "",
+        "action": "python /testbed/reproduce_issue_2.py",
+        "observation": "OBSERVATION:\nTesting nthroot_mod(961, 3, 31)\nResult: 0\nIssue not reproduced.\nTesting nthroot_mod(961, 3, 31, all_roots=True)\nResult: [0]"
+    },
+    {
+        "step": 30,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/test_zero_cases.py --file_text 'from sympy.ntheory.residue_ntheory import nthroot_mod\n\ndef test_nthroot_mod_zero():\n    test_cases = [\n        # (a, n, p, expected_all_roots)\n        (0, 3, 31, [0]),\n        (31, 3, 31, [0]),\n        (62, 3, 31, [0]),\n        (0, 2, 31, [0]),\n        (31, 2, 31, [0]),\n        (289, 5, 17, [0]),\n        (0, 1, 11, [0]),\n        (11, 1, 11, [0]),\n    ]\n    \n    for a, n, p, expected in test_cases:\n        print(f\"Testing a={a}, n={n}, p={p}\")\n        res = nthroot_mod(a, n, p, all_roots=True)\n        print(f\"  all_roots=True:  {res}\")\n        assert res == expected, f\"Expected {expected}, got {res}\"\n        \n        res_single = nthroot_mod(a, n, p, all_roots=False)\n        print(f\"  all_roots=False: {res_single}\")\n        assert res_single == expected[0], f\"Expected {expected[0]}, got {res_single}\"\n    \n    print(\"All tests passed!\")\n\nif __name__ == \"__main__\":\n    test__nthroot_mod_zero()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_zero_cases.py"
+    },
+    {
+        "step": 31,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/test_zero_cases.py   --old_str '    test__nthroot_mod_zero()\n' --new_str '    test_nthroot_mod_zero()\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/test_zero_cases.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test_zero_cases.py:\n    24\t        assert res_single == expected[0], f\"Expected {expected[0]}, got {res_single}\"\n    25\t    \n    26\t    print(\"All tests passed!\")\n    27\t\n    28\tif __name__ == \"__main__\":\n    29\t    test_nthroot_mod_zero()\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 32,
+        "thought": "",
+        "action": "python /testbed/test_zero_cases.py",
+        "observation": "OBSERVATION:\nTesting a=0, n=3, p=31\n  all_roots=True:  [0]\n  all_roots=False: 0\nTesting a=31, n=3, p=31\n  all_roots=True:  [0]\n  all_roots=False: 0\nTesting a=62, n=3, p=31\n  all_roots=True:  [0]\n  all_roots=False: 0\nTesting a=0, n=2, p=31\n  all_roots=True:  [0]\n  all_roots=False: 0\nTesting a=31, n=2, p=31\n  all_roots=True:  [0]\n  all_roots=False: 0\nTesting a=289, n=5, p=17\n  all_roots=True:  [0]\n  all_roots=False: 0\nTesting a=0, n=1, p=11\n  all_roots=True:  [0]\n  all_roots=False: 0\nTesting a=11, n=1, p=11\n  all_roots=True:  [0]\n  all_roots=False: 0\nAll tests passed!"
+    },
+    {
+        "step": 33,
+        "thought": "",
+        "action": "python -c \"from sympy.ntheory.residue_ntheory import nthroot_mod; print(nthroot_mod(8, 3, 31, True))\"",
+        "observation": "OBSERVATION:\n[2, 10, 19]"
+    },
+    {
+        "step": 34,
+        "thought": "",
+        "action": "python -c \"from sympy.ntheory.residue_ntheory import nthroot_mod; print(nthroot_mod(4, 2, 5, True))\"",
+        "observation": "OBSERVATION:\n[2, 3]"
+    },
+    {
+        "step": 35,
+        "thought": "",
+        "action": "python -c \"from sympy.ntheory.residue_ntheory import nthroot_mod; print(nthroot_mod(4, 2, 8, True))\"",
+        "observation": "OBSERVATION:\n[2, 6]"
+    },
+    {
+        "step": 36,
+        "thought": "",
+        "action": "python -c \"from sympy.ntheory.residue_ntheory import nthroot_mod; print(nthroot_mod(0, 2, 8, True))\"",
+        "observation": "OBSERVATION:\n[0, 4]"
+    },
+    {
+        "step": 37,
+        "thought": "",
+        "action": "python -c \"from sympy.ntheory.residue_ntheory import nthroot_mod; print(nthroot_mod(0, 3, 8, True))\"",
+        "observation": "OBSERVATION:\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/testbed/sympy/ntheory/residue_ntheory.py\", line 777, in nthroot_mod\n    raise NotImplementedError(\"Not implemented for composite p\")\nNotImplementedError: Not implemented for composite p"
+    },
+    {
+        "step": 38,
+        "thought": "",
+        "action": "rm /testbed/reproduce_issue.py /testbed/reproduce_issue_2.py /testbed/test_zero_cases.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 39,
+        "thought": "",
+        "action": "python -c \"from sympy.ntheory.residue_ntheory import nthroot_mod; print(nthroot_mod(18, 1, 17, True))\"",
+        "observation": "OBSERVATION:\n[18]"
+    },
+    {
+        "step": 40,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\nThank you for your work on this issue. Please carefully follow the steps below to help review your changes.\n\n1. If you made any changes to your code after running the reproduction script, please run the reproduction script again.\n  If the reproduction script is failing, please revisit your changes and make sure they are correct.\n  If you have already removed your reproduction script, please ignore this step.\n2. Remove your reproduction script (if you haven't done so already).\n3. If you have modified any TEST files, please revert them to the state they had before you started fixing the issue.\n  You can do this with `git checkout -- /path/to/test/file.py`. Use below <diff> to find the files you need to revert.\n4. Run the submit command again to confirm.\n\nHere is a list of all of your changes:\n\n<diff>\ndiff --git a/sympy/ntheory/residue_ntheory.py b/sympy/ntheory/residue_ntheory.py\nindex 9a3052d4c3..8841d9523a 100644\n--- a/sympy/ntheory/residue_ntheory.py\n+++ b/sympy/ntheory/residue_ntheory.py\n@@ -776,6 +776,9 @@ def nthroot_mod(a, n, p, all_roots=False):\n     if not isprime(p):\n         raise NotImplementedError(\"Not implemented for composite p\")\n \n+    if a % p == 0:\n+        return [0] if all_roots else 0\n+\n     if (p - 1) % n == 0:\n         return _nthroot_mod1(a, n, p, all_roots)\n     # The roots of ``x**n - a = 0 (mod p)`` are roots of\n\n</diff>"
+    },
+    {
+        "step": 41,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\ndiff --git a/sympy/ntheory/residue_ntheory.py b/sympy/ntheory/residue_ntheory.py\nindex 9a3052d4c3..8841d9523a 100644\n--- a/sympy/ntheory/residue_ntheory.py\n+++ b/sympy/ntheory/residue_ntheory.py\n@@ -776,6 +776,9 @@ def nthroot_mod(a, n, p, all_roots=False):\n     if not isprime(p):\n         raise NotImplementedError(\"Not implemented for composite p\")\n \n+    if a % p == 0:\n+        return [0] if all_roots else 0\n+\n     if (p - 1) % n == 0:\n         return _nthroot_mod1(a, n, p, all_roots)\n     # The roots of ``x**n - a = 0 (mod p)`` are roots of"
+    }
+]

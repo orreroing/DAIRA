@@ -1,0 +1,248 @@
+[
+    {
+        "step": 1,
+        "thought": "",
+        "action": "find /testbed -name \"*latex*\"",
+        "observation": "OBSERVATION:\n/testbed/sympy/parsing/latex\n/testbed/sympy/parsing/latex/_parse_latex_antlr.py\n/testbed/sympy/parsing/latex/_build_latex_antlr.py\n/testbed/sympy/parsing/latex/_antlr/latexlexer.py\n/testbed/sympy/parsing/latex/_antlr/latexparser.py\n/testbed/sympy/parsing/tests/test_latex.py\n/testbed/sympy/parsing/tests/test_latex_deps.py\n/testbed/sympy/printing/tests/test_latex.py\n/testbed/sympy/printing/latex.py"
+    },
+    {
+        "step": 2,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/reproduce_issue.py --file_text 'from sympy import Subs, latex\nfrom sympy.abc import x, y\n\nexpr = 3 * Subs(-x + y, (x,), (1,))\nprint(f\"Expression: {expr}\")\nlatex_output = latex(expr)\nprint(f\"LaTeX output: {latex_output}\")\n\nexpected_output = r'\"'\"'3 \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}'\"'\"'\nif latex_output == expected_output:\n    print(\"SUCCESS: LaTeX output matches expected output.\")\nelse:\n    print(\"FAILURE: LaTeX output does not match expected output.\")\n    print(f\"Expected: {expected_output}\")\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/reproduce_issue.py"
+    },
+    {
+        "step": 3,
+        "thought": "",
+        "action": "python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\nExpression: 3*Subs(-x + y, x, 1)\nLaTeX output: 3 \\left. - x + y \\right|_{\\substack{ x=1 }}\nFAILURE: LaTeX output does not match expected output.\nExpected: 3 \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}"
+    },
+    {
+        "step": 4,
+        "thought": "",
+        "action": "grep -n \"Subs\" /testbed/sympy/printing/latex.py",
+        "observation": "OBSERVATION:\n699:    def _print_Subs(self, subs):"
+    },
+    {
+        "step": 5,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/latex.py  --view_range 699 715",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/latex.py:\n   699\t    def _print_Subs(self, subs):\n   700\t        expr, old, new = subs.args\n   701\t        latex_expr = self._print(expr)\n   702\t        latex_old = (self._print(e) for e in old)\n   703\t        latex_new = (self._print(e) for e in new)\n   704\t        latex_subs = r'\\\\ '.join(\n   705\t            e[0] + '=' + e[1] for e in zip(latex_old, latex_new))\n   706\t        return r'\\left. %s \\right|_{\\substack{ %s }}' % (latex_expr,\n   707\t                                                         latex_subs)\n   708\t\n   709\t    def _print_Integral(self, expr):\n   710\t        tex, symbols = \"\", []\n   711\t\n   712\t        # Only up to \\iiiint exists\n   713\t        if len(expr.limits) <= 4 and all(len(lim) == 1 for lim in expr.limits):\n   714\t            # Use len(expr.limits)-1 so that syntax highlighters don't think\n   715\t            # \\\" is an escaped quote"
+    },
+    {
+        "step": 6,
+        "thought": "",
+        "action": "grep -n \"def parenthesize\" /testbed/sympy/printing/latex.py",
+        "observation": "OBSERVATION:\n202:    def parenthesize(self, item, level, strict=False):\n209:    def parenthesize_super(self, s):"
+    },
+    {
+        "step": 7,
+        "thought": "",
+        "action": "cat /testbed/sympy/printing/precedence.py",
+        "observation": "OBSERVATION:\n\"\"\"A module providing information about the necessity of brackets\"\"\"\n\nfrom __future__ import print_function, division\n\nfrom sympy.core.function import _coeff_isneg\n\n# Default precedence values for some basic types\nPRECEDENCE = {\n    \"Lambda\": 1,\n    \"Xor\": 10,\n    \"Or\": 20,\n    \"And\": 30,\n    \"Relational\": 35,\n    \"Add\": 40,\n    \"Mul\": 50,\n    \"Pow\": 60,\n    \"Func\": 70,\n    \"Not\": 100,\n    \"Atom\": 1000,\n    \"BitwiseOr\": 36,\n    \"BitwiseXor\": 37,\n    \"BitwiseAnd\": 38\n}\n\n# A dictionary assigning precedence values to certain classes. These values are\n# treated like they were inherited, so not every single class has to be named\n# here.\n# Do not use this with printers other than StrPrinter\nPRECEDENCE_VALUES = {\n    \"Equivalent\": PRECEDENCE[\"Xor\"],\n    \"Xor\": PRECEDENCE[\"Xor\"],\n    \"Implies\": PRECEDENCE[\"Xor\"],\n    \"Or\": PRECEDENCE[\"Or\"],\n    \"And\": PRECEDENCE[\"And\"],\n    \"Add\": PRECEDENCE[\"Add\"],\n    \"Pow\": PRECEDENCE[\"Pow\"],\n    \"Relational\": PRECEDENCE[\"Relational\"],\n    \"Sub\": PRECEDENCE[\"Add\"],\n    \"Not\": PRECEDENCE[\"Not\"],\n    \"Function\" : PRECEDENCE[\"Func\"],\n    \"NegativeInfinity\": PRECEDENCE[\"Add\"],\n    \"MatAdd\": PRECEDENCE[\"Add\"],\n    \"MatPow\": PRECEDENCE[\"Pow\"],\n    \"MatrixSolve\": PRECEDENCE[\"Mul\"],\n    \"TensAdd\": PRECEDENCE[\"Add\"],\n    # As soon as `TensMul` is a subclass of `Mul`, remove this:\n    \"TensMul\": PRECEDENCE[\"Mul\"],\n    \"HadamardProduct\": PRECEDENCE[\"Mul\"],\n    \"HadamardPower\": PRECEDENCE[\"Pow\"],\n    \"KroneckerProduct\": PRECEDENCE[\"Mul\"],\n    \"Equality\": PRECEDENCE[\"Mul\"],\n    \"Unequality\": PRECEDENCE[\"Mul\"],\n}\n\n# Sometimes it's not enough to assign a fixed precedence value to a\n# class. Then a function can be inserted in this dictionary that takes\n# an instance of this class as argument and returns the appropriate\n# precedence value.\n\n# Precedence functions\n\n\ndef precedence_Mul(item):\n    if _coeff_isneg(item):\n        return PRECEDENCE[\"Add\"]\n    return PRECEDENCE[\"Mul\"]\n\n\ndef precedence_Rational(item):\n    if item.p < 0:\n        return PRECEDENCE[\"Add\"]\n    return PRECEDENCE[\"Mul\"]\n\n\ndef precedence_Integer(item):\n    if item.p < 0:\n        return PRECEDENCE[\"Add\"]\n    return PRECEDENCE[\"Atom\"]\n\n\ndef precedence_Float(item):\n    if item < 0:\n        return PRECEDENCE[\"Add\"]\n    return PRECEDENCE[\"Atom\"]\n\n\ndef precedence_PolyElement(item):\n    if item.is_generator:\n        return PRECEDENCE[\"Atom\"]\n    elif item.is_ground:\n        return precedence(item.coeff(1))\n    elif item.is_term:\n        return PRECEDENCE[\"Mul\"]\n    else:\n        return PRECEDENCE[\"Add\"]\n\n\ndef precedence_FracElement(item):\n    if item.denom == 1:\n        return precedence_PolyElement(item.numer)\n    else:\n        return PRECEDENCE[\"Mul\"]\n\n\ndef precedence_UnevaluatedExpr(item):\n    return precedence(item.args[0])\n\n\nPRECEDENCE_FUNCTIONS = {\n    \"Integer\": precedence_Integer,\n    \"Mul\": precedence_Mul,\n    \"Rational\": precedence_Rational,\n    \"Float\": precedence_Float,\n    \"PolyElement\": precedence_PolyElement,\n    \"FracElement\": precedence_FracElement,\n    \"UnevaluatedExpr\": precedence_UnevaluatedExpr,\n}\n\n\ndef precedence(item):\n    \"\"\"Returns the precedence of a given object.\n\n    This is the precedence for StrPrinter.\n    \"\"\"\n    if hasattr(item, \"precedence\"):\n        return item.precedence\n    try:\n        mro = item.__class__.__mro__\n    except AttributeError:\n        return PRECEDENCE[\"Atom\"]\n    for i in mro:\n        n = i.__name__\n        if n in PRECEDENCE_FUNCTIONS:\n            return PRECEDENCE_FUNCTIONS[n](item)\n        elif n in PRECEDENCE_VALUES:\n            return PRECEDENCE_VALUES[n]\n    return PRECEDENCE[\"Atom\"]\n\n\nPRECEDENCE_TRADITIONAL = PRECEDENCE.copy()\nPRECEDENCE_TRADITIONAL['Integral'] = PRECEDENCE[\"Mul\"]\nPRECEDENCE_TRADITIONAL['Sum'] = PRECEDENCE[\"Mul\"]\nPRECEDENCE_TRADITIONAL['Product'] = PRECEDENCE[\"Mul\"]\nPRECEDENCE_TRADITIONAL['Limit'] = PRECEDENCE[\"Mul\"]\nPRECEDENCE_TRADITIONAL['Derivative'] = PRECEDENCE[\"Mul\"]\nPRECEDENCE_TRADITIONAL['TensorProduct'] = PRECEDENCE[\"Mul\"]\nPRECEDENCE_TRADITIONAL['Transpose'] = PRECEDENCE[\"Pow\"]\nPRECEDENCE_TRADITIONAL['Adjoint'] = PRECEDENCE[\"Pow\"]\nPRECEDENCE_TRADITIONAL['Dot'] = PRECEDENCE[\"Mul\"] - 1\nPRECEDENCE_TRADITIONAL['Cross'] = PRECEDENCE[\"Mul\"] - 1\nPRECEDENCE_TRADITIONAL['Gradient'] = PRECEDENCE[\"Mul\"] - 1\nPRECEDENCE_TRADITIONAL['Divergence'] = PRECEDENCE[\"Mul\"] - 1\nPRECEDENCE_TRADITIONAL['Curl'] = PRECEDENCE[\"Mul\"] - 1\nPRECEDENCE_TRADITIONAL['Laplacian'] = PRECEDENCE[\"Mul\"] - 1\nPRECEDENCE_TRADITIONAL['Union'] = PRECEDENCE['Xor']\nPRECEDENCE_TRADITIONAL['Intersection'] = PRECEDENCE['Xor']\nPRECEDENCE_TRADITIONAL['Complement'] = PRECEDENCE['Xor']\nPRECEDENCE_TRADITIONAL['SymmetricDifference'] = PRECEDENCE['Xor']\nPRECEDENCE_TRADITIONAL['ProductSet'] = PRECEDENCE['Xor']\n\n\ndef precedence_traditional(item):\n    \"\"\"Returns the precedence of a given object according to the\n    traditional rules of mathematics.\n\n    This is the precedence for the LaTeX and pretty printer.\n    \"\"\"\n    # Integral, Sum, Product, Limit have the precedence of Mul in LaTeX,\n    # the precedence of Atom for other printers:\n    from sympy import Integral, Sum, Product, Limit, Derivative, Transpose, Adjoint\n    from sympy.core.expr import UnevaluatedExpr\n    from sympy.tensor.functions import TensorProduct\n\n    if isinstance(item, UnevaluatedExpr):\n        return precedence_traditional(item.args[0])\n\n    n = item.__class__.__name__\n    if n in PRECEDENCE_TRADITIONAL:\n        return PRECEDENCE_TRADITIONAL[n]\n\n    return precedence(item)"
+    },
+    {
+        "step": 8,
+        "thought": "",
+        "action": "grep -n \"def _print_Mul\" /testbed/sympy/printing/latex.py",
+        "observation": "OBSERVATION:\n434:    def _print_Mul(self, expr):"
+    },
+    {
+        "step": 9,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/latex.py  --view_range 434 480",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/latex.py:\n   434\t    def _print_Mul(self, expr):\n   435\t        from sympy.core.power import Pow\n   436\t        from sympy.physics.units import Quantity\n   437\t        include_parens = False\n   438\t        if _coeff_isneg(expr):\n   439\t            expr = -expr\n   440\t            tex = \"- \"\n   441\t            if expr.is_Add:\n   442\t                tex += \"(\"\n   443\t                include_parens = True\n   444\t        else:\n   445\t            tex = \"\"\n   446\t\n   447\t        from sympy.simplify import fraction\n   448\t        numer, denom = fraction(expr, exact=True)\n   449\t        separator = self._settings['mul_symbol_latex']\n   450\t        numbersep = self._settings['mul_symbol_latex_numbers']\n   451\t\n   452\t        def convert(expr):\n   453\t            if not expr.is_Mul:\n   454\t                return str(self._print(expr))\n   455\t            else:\n   456\t                _tex = last_term_tex = \"\"\n   457\t\n   458\t                if self.order not in ('old', 'none'):\n   459\t                    args = expr.as_ordered_factors()\n   460\t                else:\n   461\t                    args = list(expr.args)\n   462\t\n   463\t                # If quantities are present append them at the back\n   464\t                args = sorted(args, key=lambda x: isinstance(x, Quantity) or\n   465\t                              (isinstance(x, Pow) and\n   466\t                               isinstance(x.base, Quantity)))\n   467\t\n   468\t                for i, term in enumerate(args):\n   469\t                    term_tex = self._print(term)\n   470\t\n   471\t                    if self._needs_mul_brackets(term, first=(i == 0),\n   472\t                                                last=(i == len(args) - 1)):\n   473\t                        term_tex = r\"\\left(%s\\right)\" % term_tex\n   474\t\n   475\t                    if _between_two_numbers_p[0].search(last_term_tex) and \\\n   476\t                            _between_two_numbers_p[1].match(term_tex):\n   477\t                        # between two numbers\n   478\t                        _tex += numbersep\n   479\t                    elif _tex:\n   480\t                        _tex += separator"
+    },
+    {
+        "step": 10,
+        "thought": "",
+        "action": "grep -n \"def _needs_mul_brackets\" /testbed/sympy/printing/latex.py",
+        "observation": "OBSERVATION:\n267:    def _needs_mul_brackets(self, expr, first=False, last=False):"
+    },
+    {
+        "step": 11,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/latex.py  --view_range 267 300",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/latex.py:\n   267\t    def _needs_mul_brackets(self, expr, first=False, last=False):\n   268\t        \"\"\"\n   269\t        Returns True if the expression needs to be wrapped in brackets when\n   270\t        printed as part of a Mul, False otherwise. This is True for Add,\n   271\t        but also for some container objects that would not need brackets\n   272\t        when appearing last in a Mul, e.g. an Integral. ``last=True``\n   273\t        specifies that this expr is the last to appear in a Mul.\n   274\t        ``first=True`` specifies that this expr is the first to appear in\n   275\t        a Mul.\n   276\t        \"\"\"\n   277\t        from sympy import Integral, Product, Sum\n   278\t\n   279\t        if expr.is_Mul:\n   280\t            if not first and _coeff_isneg(expr):\n   281\t                return True\n   282\t        elif precedence_traditional(expr) < PRECEDENCE[\"Mul\"]:\n   283\t            return True\n   284\t        elif expr.is_Relational:\n   285\t            return True\n   286\t        if expr.is_Piecewise:\n   287\t            return True\n   288\t        if any([expr.has(x) for x in (Mod,)]):\n   289\t            return True\n   290\t        if (not last and\n   291\t                any([expr.has(x) for x in (Integral, Product, Sum)])):\n   292\t            return True\n   293\t\n   294\t        return False\n   295\t\n   296\t    def _needs_add_brackets(self, expr):\n   297\t        \"\"\"\n   298\t        Returns True if the expression needs to be wrapped in brackets when\n   299\t        printed as part of an Add, False otherwise.  This is False for most\n   300\t        things."
+    },
+    {
+        "step": 12,
+        "thought": "",
+        "action": "grep -n \"Subs\" /testbed/sympy/printing/pretty/pretty.py",
+        "observation": "OBSERVATION:\n2337:    def _print_Subs(self, e):"
+    },
+    {
+        "step": 13,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/pretty/pretty.py  --view_range 2337 2355",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/pretty/pretty.py:\n  2337\t    def _print_Subs(self, e):\n  2338\t        pform = self._print(e.expr)\n  2339\t        pform = prettyForm(*pform.parens())\n  2340\t\n  2341\t        h = pform.height() if pform.height() > 1 else 2\n  2342\t        rvert = stringPict(vobj('|', h), baseline=pform.baseline)\n  2343\t        pform = prettyForm(*pform.right(rvert))\n  2344\t\n  2345\t        b = pform.baseline\n  2346\t        pform.baseline = pform.height() - 1\n  2347\t        pform = prettyForm(*pform.right(self._print_seq([\n  2348\t            self._print_seq((self._print(v[0]), xsym('=='), self._print(v[1])),\n  2349\t                delimiter='') for v in zip(e.variables, e.point) ])))\n  2350\t\n  2351\t        pform.baseline = b\n  2352\t        return pform\n  2353\t\n  2354\t    def _print_number_function(self, e, name):\n  2355\t        # Print name_arg[0] for one argument or name_arg[0](arg[1])"
+    },
+    {
+        "step": 14,
+        "thought": "",
+        "action": "python -c \"from sympy import Subs; from sympy.abc import x; from sympy.printing.pretty import pprint; pprint(Subs(x, (x,), (1,)))\"",
+        "observation": "OBSERVATION:\n(x)│   \n   │x=1"
+    },
+    {
+        "step": 15,
+        "thought": "",
+        "action": "python -c \"from sympy import Subs, latex; from sympy.abc import x; print(latex(Subs(-x, (x,), (1,))))\"",
+        "observation": "OBSERVATION:\n\\left. - x \\right|_{\\substack{ x=1 }}"
+    },
+    {
+        "step": 16,
+        "thought": "",
+        "action": "python -c \"from sympy import Subs; from sympy.abc import x; from sympy.printing.pretty import pprint; pprint(Subs(-x, (x,), (1,)))\"",
+        "observation": "OBSERVATION:\n(-x)│   \n    │x=1"
+    },
+    {
+        "step": 17,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/sympy/printing/latex.py   --old_str '        latex_expr = self._print(expr)' --new_str '        latex_expr = self.parenthesize(expr, PRECEDENCE[\"Mul\"])'",
+        "observation": "OBSERVATION:\nThe file /testbed/sympy/printing/latex.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/sympy/printing/latex.py:\n   696\t                                                  PRECEDENCE[\"Mul\"],\n   697\t                                                  strict=True))\n   698\t\n   699\t    def _print_Subs(self, subs):\n   700\t        expr, old, new = subs.args\n   701\t        latex_expr = self.parenthesize(expr, PRECEDENCE[\"Mul\"])\n   702\t        latex_old = (self._print(e) for e in old)\n   703\t        latex_new = (self._print(e) for e in new)\n   704\t        latex_subs = r'\\\\ '.join(\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 18,
+        "thought": "",
+        "action": "python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\nExpression: 3*Subs(-x + y, x, 1)\nLaTeX output: 3 \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}\nSUCCESS: LaTeX output matches expected output."
+    },
+    {
+        "step": 19,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/test_cases.py --file_text 'from sympy import Subs, latex, symbols\nx, y = symbols('\"'\"'x y'\"'\"')\n\ncases = [\n    (Subs(x + y, x, 1), r'\"'\"'\\left. \\left(x + y\\right) \\right|_{\\substack{ x=1 }}'\"'\"'),\n    (Subs(-x + y, x, 1), r'\"'\"'\\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}'\"'\"'),\n    (Subs(x * y, x, 1), r'\"'\"'\\left. x y \\right|_{\\substack{ x=1 }}'\"'\"'),\n    (Subs(x, x, 1), r'\"'\"'\\left. x \\right|_{\\substack{ x=1 }}'\"'\"'),\n    (Subs(x**2, x, 1), r'\"'\"'\\left. x^{2} \\right|_{\\substack{ x=1 }}'\"'\"'),\n    (3 * Subs(-x + y, x, 1), r'\"'\"'3 \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}'\"'\"'),\n]\n\nfor expr, expected in cases:\n    actual = latex(expr)\n    print(f\"Expr: {expr}\")\n    print(f\"Actual: {actual}\")\n    if actual == expected:\n        print(\"SUCCESS\")\n    else:\n        print(f\"FAILURE: Expected {expected}\")\n    print(\"-\" * 20)\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_cases.py"
+    },
+    {
+        "step": 20,
+        "thought": "",
+        "action": "python /testbed/test_cases.py",
+        "observation": "OBSERVATION:\nExpr: Subs(x + y, x, 1)\nActual: \\left. \\left(x + y\\right) \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(-x + y, x, 1)\nActual: \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(x*y, x, 1)\nActual: \\left. \\left(x y\\right) \\right|_{\\substack{ x=1 }}\nFAILURE: Expected \\left. x y \\right|_{\\substack{ x=1 }}\n--------------------\nExpr: Subs(x, x, 1)\nActual: \\left. x \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(x**2, x, 1)\nActual: \\left. x^{2} \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: 3*Subs(-x + y, x, 1)\nActual: 3 \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------"
+    },
+    {
+        "step": 21,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/latex.py  --view_range 202 207",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/latex.py:\n   202\t    def parenthesize(self, item, level, strict=False):\n   203\t        prec_val = precedence_traditional(item)\n   204\t        if (prec_val < level) or ((not strict) and prec_val <= level):\n   205\t            return r\"\\left({}\\right)\".format(self._print(item))\n   206\t        else:\n   207\t            return self._print(item)"
+    },
+    {
+        "step": 22,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/sympy/printing/latex.py   --old_str '        latex_expr = self.parenthesize(expr, PRECEDENCE[\"Mul\"])' --new_str '        latex_expr = self.parenthesize(expr, PRECEDENCE[\"Mul\"], strict=True)'",
+        "observation": "OBSERVATION:\nThe file /testbed/sympy/printing/latex.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/sympy/printing/latex.py:\n   696\t                                                  PRECEDENCE[\"Mul\"],\n   697\t                                                  strict=True))\n   698\t\n   699\t    def _print_Subs(self, subs):\n   700\t        expr, old, new = subs.args\n   701\t        latex_expr = self.parenthesize(expr, PRECEDENCE[\"Mul\"], strict=True)\n   702\t        latex_old = (self._print(e) for e in old)\n   703\t        latex_new = (self._print(e) for e in new)\n   704\t        latex_subs = r'\\\\ '.join(\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 23,
+        "thought": "",
+        "action": "python /testbed/test_cases.py",
+        "observation": "OBSERVATION:\nExpr: Subs(x + y, x, 1)\nActual: \\left. \\left(x + y\\right) \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(-x + y, x, 1)\nActual: \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(x*y, x, 1)\nActual: \\left. x y \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(x, x, 1)\nActual: \\left. x \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(x**2, x, 1)\nActual: \\left. x^{2} \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: 3*Subs(-x + y, x, 1)\nActual: 3 \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------"
+    },
+    {
+        "step": 24,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/test_cases.py   --old_str '    (3 * Subs(-x + y, x, 1), r'\"'\"'3 \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}'\"'\"'),\n]\n' --new_str '    (3 * Subs(-x + y, x, 1), r'\"'\"'3 \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}'\"'\"'),\n    (Subs(-x, x, 1), r'\"'\"'\\left. \\left(- x\\right) \\right|_{\\substack{ x=1 }}'\"'\"'),\n]\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/test_cases.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test_cases.py:\n     5\t    (Subs(x + y, x, 1), r'\\left. \\left(x + y\\right) \\right|_{\\substack{ x=1 }}'),\n     6\t    (Subs(-x + y, x, 1), r'\\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}'),\n     7\t    (Subs(x * y, x, 1), r'\\left. x y \\right|_{\\substack{ x=1 }}'),\n     8\t    (Subs(x, x, 1), r'\\left. x \\right|_{\\substack{ x=1 }}'),\n     9\t    (Subs(x**2, x, 1), r'\\left. x^{2} \\right|_{\\substack{ x=1 }}'),\n    10\t    (3 * Subs(-x + y, x, 1), r'3 \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}'),\n    11\t    (Subs(-x, x, 1), r'\\left. \\left(- x\\right) \\right|_{\\substack{ x=1 }}'),\n    12\t]\n    13\t\n    14\tfor expr, expected in cases:\n    15\t    actual = latex(expr)\n    16\t    print(f\"Expr: {expr}\")\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 25,
+        "thought": "",
+        "action": "python /testbed/test_cases.py",
+        "observation": "OBSERVATION:\nExpr: Subs(x + y, x, 1)\nActual: \\left. \\left(x + y\\right) \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(-x + y, x, 1)\nActual: \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(x*y, x, 1)\nActual: \\left. x y \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(x, x, 1)\nActual: \\left. x \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(x**2, x, 1)\nActual: \\left. x^{2} \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: 3*Subs(-x + y, x, 1)\nActual: 3 \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}\nSUCCESS\n--------------------\nExpr: Subs(-x, x, 1)\nActual: \\left. - x \\right|_{\\substack{ x=1 }}\nFAILURE: Expected \\left. \\left(- x\\right) \\right|_{\\substack{ x=1 }}\n--------------------"
+    },
+    {
+        "step": 26,
+        "thought": "",
+        "action": "python -c \"from sympy.printing.precedence import precedence_traditional; from sympy.abc import x; print(precedence_traditional(-x))\"",
+        "observation": "OBSERVATION:\n50"
+    },
+    {
+        "step": 27,
+        "thought": "",
+        "action": "python -c \"from sympy.abc import x; t = -x; print(type(t)); from sympy.core.function import _coeff_isneg; print(f'_coeff_isneg: {_coeff_isneg(t)}')\"",
+        "observation": "OBSERVATION:\n<class 'sympy.core.mul.Mul'>\n_coeff_isneg: True"
+    },
+    {
+        "step": 28,
+        "thought": "",
+        "action": "python -c \"from sympy.abc import x; from sympy.printing.precedence import precedence; print(precedence(-x))\"",
+        "observation": "OBSERVATION:\n40"
+    },
+    {
+        "step": 29,
+        "thought": "",
+        "action": "python -c \"from sympy import Integral, latex; from sympy.abc import x; print(latex(Integral(-x, x)))\"",
+        "observation": "OBSERVATION:\n\\int - x\\, dx"
+    },
+    {
+        "step": 30,
+        "thought": "",
+        "action": "python -c \"from sympy import Integral, latex; from sympy.abc import x; expr = Integral(-x, x); print(f'expr: {expr}'); print(f'type: {type(expr.function)}'); print(f'latex: {latex(expr)}')\"",
+        "observation": "OBSERVATION:\nexpr: Integral(-x, x)\ntype: <class 'sympy.core.mul.Mul'>\nlatex: \\int - x\\, dx"
+    },
+    {
+        "step": 31,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/latex.py  --view_range 709 740",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/latex.py:\n   709\t    def _print_Integral(self, expr):\n   710\t        tex, symbols = \"\", []\n   711\t\n   712\t        # Only up to \\iiiint exists\n   713\t        if len(expr.limits) <= 4 and all(len(lim) == 1 for lim in expr.limits):\n   714\t            # Use len(expr.limits)-1 so that syntax highlighters don't think\n   715\t            # \\\" is an escaped quote\n   716\t            tex = r\"\\i\" + \"i\"*(len(expr.limits) - 1) + \"nt\"\n   717\t            symbols = [r\"\\, d%s\" % self._print(symbol[0])\n   718\t                       for symbol in expr.limits]\n   719\t\n   720\t        else:\n   721\t            for lim in reversed(expr.limits):\n   722\t                symbol = lim[0]\n   723\t                tex += r\"\\int\"\n   724\t\n   725\t                if len(lim) > 1:\n   726\t                    if self._settings['mode'] != 'inline' \\\n   727\t                            and not self._settings['itex']:\n   728\t                        tex += r\"\\limits\"\n   729\t\n   730\t                    if len(lim) == 3:\n   731\t                        tex += \"_{%s}^{%s}\" % (self._print(lim[1]),\n   732\t                                               self._print(lim[2]))\n   733\t                    if len(lim) == 2:\n   734\t                        tex += \"^{%s}\" % (self._print(lim[1]))\n   735\t\n   736\t                symbols.insert(0, r\"\\, d%s\" % self._print(symbol))\n   737\t\n   738\t        return r\"%s %s%s\" % (tex, self.parenthesize(expr.function,\n   739\t                                                    PRECEDENCE[\"Mul\"],\n   740\t                                                    strict=True),"
+    },
+    {
+        "step": 32,
+        "thought": "",
+        "action": "python -c \"from sympy import Integral, latex; from sympy.abc import x, y; print(latex(Integral(x+y, x)))\"",
+        "observation": "OBSERVATION:\n\\int \\left(x + y\\right)\\, dx"
+    },
+    {
+        "step": 33,
+        "thought": "",
+        "action": "python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\nExpression: 3*Subs(-x + y, x, 1)\nLaTeX output: 3 \\left. \\left(- x + y\\right) \\right|_{\\substack{ x=1 }}\nSUCCESS: LaTeX output matches expected output."
+    },
+    {
+        "step": 34,
+        "thought": "",
+        "action": "python -c \"from sympy import Subs; from sympy.abc import x, y; print(Subs(x+y, x, 1))\"",
+        "observation": "OBSERVATION:\nSubs(x + y, x, 1)"
+    },
+    {
+        "step": 35,
+        "thought": "",
+        "action": "python -c \"from sympy import Subs, latex; from sympy.abc import x, y; print(latex(Subs(x+y, (x, y), (1, 2))))\"",
+        "observation": "OBSERVATION:\n\\left. \\left(x + y\\right) \\right|_{\\substack{ x=1\\\\ y=2 }}"
+    },
+    {
+        "step": 36,
+        "thought": "",
+        "action": "python -c \"from sympy.printing.precedence import precedence_traditional; from sympy import Integer; print(precedence_traditional(Integer(-1)))\"",
+        "observation": "OBSERVATION:\n40"
+    },
+    {
+        "step": 37,
+        "thought": "",
+        "action": "python -c \"from sympy import Subs, latex, Integer; from sympy.abc import x; print(latex(Subs(Integer(-1), x, 1)))\"",
+        "observation": "OBSERVATION:\n\\left. \\left(-1\\right) \\right|_{\\substack{ x=1 }}"
+    },
+    {
+        "step": 38,
+        "thought": "",
+        "action": "python -c \"from sympy import Subs, latex, Integer; from sympy.abc import x; print(latex(Subs(Integer(1), x, 1)))\"",
+        "observation": "OBSERVATION:\n\\left. 1 \\right|_{\\substack{ x=1 }}"
+    },
+    {
+        "step": 39,
+        "thought": "",
+        "action": "python -c \"from sympy import Subs, latex, Rational; from sympy.abc import x; print(latex(Subs(Rational(-1, 2), x, 1)))\"",
+        "observation": "OBSERVATION:\n\\left. \\left(- \\frac{1}{2}\\right) \\right|_{\\substack{ x=1 }}"
+    },
+    {
+        "step": 40,
+        "thought": "",
+        "action": "rm /testbed/reproduce_issue.py /testbed/test_cases.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 41,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\ndiff --git a/sympy/printing/latex.py b/sympy/printing/latex.py\nindex 8743723ea0..969072f47f 100644\n--- a/sympy/printing/latex.py\n+++ b/sympy/printing/latex.py\n@@ -698,7 +698,7 @@ def _print_Derivative(self, expr):\n \n     def _print_Subs(self, subs):\n         expr, old, new = subs.args\n-        latex_expr = self._print(expr)\n+        latex_expr = self.parenthesize(expr, PRECEDENCE[\"Mul\"], strict=True)\n         latex_old = (self._print(e) for e in old)\n         latex_new = (self._print(e) for e in new)\n         latex_subs = r'\\\\ '.join("
+    }
+]

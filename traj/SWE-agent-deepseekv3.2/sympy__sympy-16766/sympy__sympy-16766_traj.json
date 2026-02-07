@@ -1,0 +1,794 @@
+[
+    {
+        "step": 1,
+        "thought": "I'll help you implement the necessary changes to support `Indexed` in `PythonCodePrinter`. Let's start by exploring the repository structure and understanding the codebase.",
+        "action": "find /testbed -type f -name \"*.py\" | grep -i pythoncode | head -20",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 2,
+        "thought": "Let me search more broadly for PythonCodePrinter:",
+        "action": "find /testbed -type f -name \"*.py\" | xargs grep -l \"PythonCodePrinter\" | head -20",
+        "observation": "OBSERVATION:\n/testbed/sympy/utilities/lambdify.py\n/testbed/sympy/printing/tests/test_pycode.py\n/testbed/sympy/printing/pycode.py\n/testbed/sympy/printing/tensorflow.py\n/testbed/sympy/printing/lambdarepr.py\n/testbed/sympy/codegen/pyutils.py"
+    },
+    {
+        "step": 3,
+        "thought": "Good! Let's look at the main file `pycode.py`:",
+        "action": "str_replace_editor view /testbed/sympy/printing/pycode.py",
+        "observation": "OBSERVATION:\n<NOTE>This file is too large to display entirely. Showing abbreviated version. Please use `str_replace_editor view` with the `view_range` parameter to show selected lines next.</NOTE>\n     1 \"\"\"\n     2 Python code printers\n     3 \n     4 This module contains python code printers for plain python as well as NumPy & SciPy enabled code.\n     5 \"\"\"\n     6 \n     7 \n     8 from collections import defaultdict\n     9 from itertools import chain\n    10 from sympy.core import S\n    11 from .precedence import precedence\n    12 from .codeprinter import CodePrinter\n    13 \n    14 _kw_py2and3 = {\n    15     'and', 'as', 'assert', 'break', 'class', 'continue', 'def', 'del', 'elif',\n    16     'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import', 'in',\n    17     'is', 'lambda', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while',\n    18     'with', 'yield', 'None'  # 'None' is actually not in Python 2's keyword.kwlist\n    19 }\n    20 _kw_only_py2 = {'exec', 'print'}\n    21 _kw_only_py3 = {'False', 'nonlocal', 'True'}\n    22 \n    23 _known_functions = {\n    24     'Abs': 'abs',\n    25 }\n    26 _known_functions_math = {\n    27     'acos': 'acos',\n    28     'acosh': 'acosh',\n    29     'asin': 'asin',\n    30     'asinh': 'asinh',\n    31     'atan': 'atan',\n    32     'atan2': 'atan2',\n    33     'atanh': 'atanh',\n    34     'ceiling': 'ceil',\n    35     'cos': 'cos',\n    36     'cosh': 'cosh',\n    37     'erf': 'erf',\n    38     'erfc': 'erfc',\n    39     'exp': 'exp',\n    40     'expm1': 'expm1',\n    41     'factorial': 'factorial',\n    42     'floor': 'floor',\n    43     'gamma': 'gamma',\n    44     'hypot': 'hypot',\n    45     'loggamma': 'lgamma',\n    46     'log': 'log',\n    47     'ln': 'log',\n    48     'log10': 'log10',\n    49     'log1p': 'log1p',\n    50     'log2': 'log2',\n    51     'sin': 'sin',\n    52     'sinh': 'sinh',\n    53     'Sqrt': 'sqrt',\n    54     'tan': 'tan',\n    55     'tanh': 'tanh'\n    56 }  # Not used from ``math``: [copysign isclose isfinite isinf isnan ldexp frexp pow modf\n    57 # radians trunc fmod fsum gcd degrees fabs]\n    58 _known_constants_math = {\n    59     'Exp1': 'e',\n    60     'Pi': 'pi',\n    61     'E': 'e'\n    62     # Only in python >= 3.5:\n    63     # 'Infinity': 'inf',\n    64     # 'NaN': 'nan'\n    65 }\n    66 \n    67 def _print_known_func(self, expr):\n    68     known = self.known_functions[expr.__class__.__name__]\n    69     return '{name}({args})'.format(name=self._module_format(known),\n    70                                    args=', '.join(map(lambda arg: self._print(arg), expr.args)))\n    71 \n    72 \n    73 def _print_known_const(self, expr):\n    74     known = self.known_constants[expr.__class__.__name__]\n    75     return self._module_format(known)\n    76 \n    77 \n    78 class AbstractPythonCodePrinter(CodePrinter):\n    79     printmethod = \"_pythoncode\"\n    80     language = \"Python\"\n    81     standard = \"python3\"\n    82     reserved_words = _kw_py2and3.union(_kw_only_py3)\n    83     modules = None  # initialized to a set in __init__\n    84     tab = '    '\n    85     _kf = dict(chain(\n    86         _known_functions.items(),\n    87         [(k, 'math.' + v) for k, v in _known_functions_math.items()]\n    88     ))\n    89     _kc = {k: 'math.'+v for k, v in _known_constants_math.items()}\n    90     _operators = {'and': 'and', 'or': 'or', 'not': 'not'}\n    91     _default_settings = dict(\n    92         CodePrinter._default_settings,\n    93         user_functions={},\n    94         precision=17,\n    95         inline=True,\n    96         fully_qualified_modules=True,\n    97         contract=False\n    98     )\n    99 \n   100     def __init__(self, settings=None):\n   101 ... eliding lines 101-106 ...\n   107 \n   108     def _declare_number_const(self, name, value):\n   109         return \"%s = %s\" % (name, value)\n   110 \n   111     def _module_format(self, fqn, register=True):\n   112 ... eliding lines 112-119 ...\n   120 \n   121     def _format_code(self, lines):\n   122         return lines\n   123 \n   124     def _get_statement(self, codestring):\n   125         return \"{}\".format(codestring)\n   126 \n   127     def _get_comment(self, text):\n   128         return \"  # {0}\".format(text)\n   129 \n   130     def _expand_fold_binary_op(self, op, args):\n   131 ... eliding lines 131-151 ...\n   152 \n   153     def _expand_reduce_binary_op(self, op, args):\n   154 ... eliding lines 154-176 ...\n   177 \n   178     def _get_einsum_string(self, subranks, contraction_indices):\n   179 ... eliding lines 179-211 ...\n   212 \n   213     def _print_NaN(self, expr):\n   214         return \"float('nan')\"\n   215 \n   216     def _print_Infinity(self, expr):\n   217         return \"float('inf')\"\n   218 \n   219     def _print_NegativeInfinity(self, expr):\n   220         return \"float('-inf')\"\n   221 \n   222     def _print_ComplexInfinity(self, expr):\n   223         return self._print_NaN(expr)\n   224 \n   225     def _print_Mod(self, expr):\n   226         PREC = precedence(expr)\n   227         return ('{0} % {1}'.format(*map(lambda x: self.parenthesize(x, PREC), expr.args)))\n   228 \n   229     def _print_Piecewise(self, expr):\n   230 ... eliding lines 230-250 ...\n   251 \n   252     def _print_Relational(self, expr):\n   253 ... eliding lines 253-266 ...\n   267 \n   268     def _print_ITE(self, expr):\n   269         from sympy.functions.elementary.piecewise import Piecewise\n   270         return self._print(expr.rewrite(Piecewise))\n   271 \n   272     def _print_Sum(self, expr):\n   273 ... eliding lines 273-281 ...\n   282 \n   283     def _print_ImaginaryUnit(self, expr):\n   284         return '1j'\n   285 \n   286     def _print_MatrixBase(self, expr):\n   287         name = expr.__class__.__name__\n   288         func = self.known_functions.get(name, name)\n   289         return \"%s(%s)\" % (func, self._print(expr.tolist()))\n   290 \n   291     _print_SparseMatrix = \\\n   292         _print_MutableSparseMatrix = \\\n   293         _print_ImmutableSparseMatrix = \\\n   294         _print_Matrix = \\\n   295         _print_DenseMatrix = \\\n   296         _print_MutableDenseMatrix = \\\n   297         _print_ImmutableMatrix = \\\n   298         _print_ImmutableDenseMatrix = \\\n   299         lambda self, expr: self._print_MatrixBase(expr)\n   300 \n   301     def _indent_codestring(self, codestring):\n   302         return '\\n'.join([self.tab + line for line in codestring.split('\\n')])\n   303 \n   304     def _print_FunctionDefinition(self, fd):\n   305 ... eliding lines 305-310 ...\n   311 \n   312     def _print_While(self, whl):\n   313         body = '\\n'.join(map(lambda arg: self._print(arg), whl.body))\n   314         return \"while {cond}:\\n{body}\".format(\n   315             cond=self._print(whl.condition),\n   316             body=self._indent_codestring(body)\n   317         )\n   318 \n   319     def _print_Declaration(self, decl):\n   320         return '%s = %s' % (\n   321             self._print(decl.variable.symbol),\n   322             self._print(decl.variable.value)\n   323         )\n   324 \n   325     def _print_Return(self, ret):\n   326         arg, = ret.args\n   327         return 'return %s' % self._print(arg)\n   328 \n   329     def _print_Print(self, prnt):\n   330 ... eliding lines 330-336 ...\n   337 \n   338     def _print_Stream(self, strm):\n   339 ... eliding lines 339-344 ...\n   345 \n   346     def _print_NoneToken(self, arg):\n   347         return 'None'\n   348 \n   349 \n   350 class PythonCodePrinter(AbstractPythonCodePrinter):\n   351 \n   352     def _print_sign(self, e):\n   353         return '(0.0 if {e} == 0 else {f}(1, {e}))'.format(\n   354             f=self._module_format('math.copysign'), e=self._print(e.args[0]))\n   355 \n   356     def _print_Not(self, expr):\n   357         PREC = precedence(expr)\n   358         return self._operators['not'] + self.parenthesize(expr.args[0], PREC)\n   359 \n   360 \n   361 for k in PythonCodePrinter._kf:\n   362     setattr(PythonCodePrinter, '_print_%s' % k, _print_known_func)\n   363 \n   364 for k in _known_constants_math:\n   365     setattr(PythonCodePrinter, '_print_%s' % k, _print_known_const)\n   366 \n   367 \n   368 def pycode(expr, **settings):\n   369 ... eliding lines 369-389 ...\n   390 \n   391 \n   392 _not_in_mpmath = 'log1p log2'.split()\n   393 _in_mpmath = [(k, v) for k, v in _known_functions_math.items() if k not in _not_in_mpmath]\n   394 _known_functions_mpmath = dict(_in_mpmath, **{\n   395     'sign': 'sign',\n   396 })\n   397 _known_constants_mpmath = {\n   398     'Pi': 'pi'\n   399 }\n   400 \n   401 \n   402 class MpmathPrinter(PythonCodePrinter):\n   403     \"\"\"\n   404     Lambda printer for mpmath which maintains precision for floats\n   405     \"\"\"\n   406     printmethod = \"_mpmathcode\"\n   407 \n   408     _kf = dict(chain(\n   409         _known_functions.items(),\n   410         [(k, 'mpmath.' + v) for k, v in _known_functions_mpmath.items()]\n   411     ))\n   412 \n   413     def _print_Float(self, e):\n   414         # XXX: This does not handle setting mpmath.mp.dps. It is assumed that\n   415         # the caller of the lambdified function will have set it to sufficient\n   416         # precision to match the Floats in the expression.\n   417 \n   418         # Remove 'mpz' if gmpy is installed.\n   419         args = str(tuple(map(int, e._mpf_)))\n   420         return '{func}({args})'.format(func=self._module_format('mpmath.mpf'), args=args)\n   421 \n   422 \n   423     def _print_Rational(self, e):\n   424         return '{0}({1})/{0}({2})'.format(\n   425             self._module_format('mpmath.mpf'),\n   426             e.p,\n   427             e.q,\n   428             )\n   429 \n   430     def _print_uppergamma(self, e):\n   431         return \"{0}({1}, {2}, {3})\".format(\n   432             self._module_format('mpmath.gammainc'),\n   433             self._print(e.args[0]),\n   434             self._print(e.args[1]),\n   435             self._module_format('mpmath.inf'))\n   436 \n   437     def _print_lowergamma(self, e):\n   438         return \"{0}({1}, 0, {2})\".format(\n   439             self._module_format('mpmath.gammainc'),\n   440             self._print(e.args[0]),\n   441             self._print(e.args[1]))\n   442 \n   443     def _print_log2(self, e):\n   444         return '{0}({1})/{0}(2)'.format(\n   445             self._module_format('mpmath.log'), self._print(e.args[0]))\n   446 \n   447     def _print_log1p(self, e):\n   448         return '{0}({1}+1)'.format(\n   449             self._module_format('mpmath.log'), self._print(e.args[0]))\n   450 \n   451 for k in MpmathPrinter._kf:\n   452     setattr(MpmathPrinter, '_print_%s' % k, _print_known_func)\n   453 \n   454 for k in _known_constants_mpmath:\n   455     setattr(MpmathPrinter, '_print_%s' % k, _print_known_const)\n   456 \n   457 \n   458 _not_in_numpy = 'erf erfc factorial gamma loggamma'.split()\n   459 _in_numpy = [(k, v) for k, v in _known_functions_math.items() if k not in _not_in_numpy]\n   460 _known_functions_numpy = dict(_in_numpy, **{\n   461     'acos': 'arccos',\n   462     'acosh': 'arccosh',\n   463     'asin': 'arcsin',\n   464     'asinh': 'arcsinh',\n   465     'atan': 'arctan',\n   466     'atan2': 'arctan2',\n   467     'atanh': 'arctanh',\n   468     'exp2': 'exp2',\n   469     'sign': 'sign',\n   470 })\n   471 \n   472 \n   473 class NumPyPrinter(PythonCodePrinter):\n   474     \"\"\"\n   475     Numpy printer which handles vectorized piecewise functions,\n   476     logical operators, etc.\n   477     \"\"\"\n   478     printmethod = \"_numpycode\"\n   479 \n   480     _kf = dict(chain(\n   481         PythonCodePrinter._kf.items(),\n   482         [(k, 'numpy.' + v) for k, v in _known_functions_numpy.items()]\n   483     ))\n   484     _kc = {k: 'numpy.'+v for k, v in _known_constants_math.items()}\n   485 \n   486 \n   487     def _print_seq(self, seq):\n   488         \"General sequence printer: converts to tuple\"\n   489         # Print tuples here instead of lists because numba supports\n   490         #     tuples in nopython mode.\n   491         delimiter=', '\n   492         return '({},)'.format(delimiter.join(self._print(item) for item in seq))\n   493 \n   494     def _print_MatMul(self, expr):\n   495         \"Matrix multiplication printer\"\n   496         if expr.as_coeff_matrices()[0] is not S(1):\n   497             expr_list = expr.as_coeff_matrices()[1]+[(expr.as_coeff_matrices()[0])]\n   498             return '({0})'.format(').dot('.join(self._print(i) for i in expr_list))\n   499         return '({0})'.format(').dot('.join(self._print(i) for i in expr.args))\n   500 \n   501     def _print_MatPow(self, expr):\n   502         \"Matrix power printer\"\n   503         return '{0}({1}, {2})'.format(self._module_format('numpy.linalg.matrix_power'),\n   504             self._print(expr.args[0]), self._print(expr.args[1]))\n   505 \n   506     def _print_Inverse(self, expr):\n   507         \"Matrix inverse printer\"\n   508         return '{0}({1})'.format(self._module_format('numpy.linalg.inv'),\n   509             self._print(expr.args[0]))\n   510 \n   511     def _print_DotProduct(self, expr):\n   512         # DotProduct allows any shape order, but numpy.dot does matrix\n   513         # multiplication, so we have to make sure it gets 1 x n by n x 1.\n   514 ... eliding lines 514-522 ...\n   523 \n   524     def _print_Piecewise(self, expr):\n   525 ... eliding lines 525-532 ...\n   533 \n   534     def _print_Relational(self, expr):\n   535 ... eliding lines 535-549 ...\n   550 \n   551     def _print_And(self, expr):\n   552         \"Logical And printer\"\n   553         # We have to override LambdaPrinter because it uses Python 'and' keyword.\n   554         # If LambdaPrinter didn't define it, we could use StrPrinter's\n   555         # version of the function and add 'logical_and' to NUMPY_TRANSLATIONS.\n   556         return '{0}.reduce(({1}))'.format(self._module_format('numpy.logical_and'), ','.join(self._print(i) for i in expr.args))\n   557 \n   558     def _print_Or(self, expr):\n   559         \"Logical Or printer\"\n   560         # We have to override LambdaPrinter because it uses Python 'or' keyword.\n   561         # If LambdaPrinter didn't define it, we could use StrPrinter's\n   562         # version of the function and add 'logical_or' to NUMPY_TRANSLATIONS.\n   563         return '{0}.reduce(({1}))'.format(self._module_format('numpy.logical_or'), ','.join(self._print(i) for i in expr.args))\n   564 \n   565     def _print_Not(self, expr):\n   566         \"Logical Not printer\"\n   567         # We have to override LambdaPrinter because it uses Python 'not' keyword.\n   568         # If LambdaPrinter didn't define it, we would still have to define our\n   569         #     own because StrPrinter doesn't define it.\n   570         return '{0}({1})'.format(self._module_format('numpy.logical_not'), ','.join(self._print(i) for i in expr.args))\n   571 \n   572     def _print_Min(self, expr):\n   573         return '{0}(({1}))'.format(self._module_format('numpy.amin'), ','.join(self._print(i) for i in expr.args))\n   574 \n   575     def _print_Max(self, expr):\n   576         return '{0}(({1}))'.format(self._module_format('numpy.amax'), ','.join(self._print(i) for i in expr.args))\n   577 \n   578     def _print_Pow(self, expr):\n   579         if expr.exp == 0.5:\n   580             return '{0}({1})'.format(self._module_format('numpy.sqrt'), self._print(expr.base))\n   581         else:\n   582             return super(NumPyPrinter, self)._print_Pow(expr)\n   583 \n   584     def _print_arg(self, expr):\n   585         return \"%s(%s)\" % (self._module_format('numpy.angle'), self._print(expr.args[0]))\n   586 \n   587     def _print_im(self, expr):\n   588         return \"%s(%s)\" % (self._module_format('numpy.imag'), self._print(expr.args[0]))\n   589 \n   590     def _print_Mod(self, expr):\n   591         return \"%s(%s)\" % (self._module_format('numpy.mod'), ', '.join(\n   592             map(lambda arg: self._print(arg), expr.args)))\n   593 \n   594     def _print_re(self, expr):\n   595         return \"%s(%s)\" % (self._module_format('numpy.real'), self._print(expr.args[0]))\n   596 \n   597     def _print_sinc(self, expr):\n   598         return \"%s(%s)\" % (self._module_format('numpy.sinc'), self._print(expr.args[0]/S.Pi))\n   599 \n   600  <response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>\n<IMPORTANT><NOTE>The above file has been abbreviated. Please use `str_replace editor view` with `view_range` to look at relevant files in detail.</NOTE></IMPORTANT>"
+    },
+    {
+        "step": 4,
+        "thought": "Let me search for Indexed in the file:",
+        "action": "grep -n \"Indexed\" /testbed/sympy/printing/pycode.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 5,
+        "thought": "Let me check if there's a `_print_Indexed` method in the file:",
+        "action": "grep -n \"_print_\" /testbed/sympy/printing/pycode.py | head -50",
+        "observation": "OBSERVATION:\n67:def _print_known_func(self, expr):\n73:def _print_known_const(self, expr):\n213:    def _print_NaN(self, expr):\n216:    def _print_Infinity(self, expr):\n219:    def _print_NegativeInfinity(self, expr):\n222:    def _print_ComplexInfinity(self, expr):\n223:        return self._print_NaN(expr)\n225:    def _print_Mod(self, expr):\n229:    def _print_Piecewise(self, expr):\n252:    def _print_Relational(self, expr):\n266:        return super(AbstractPythonCodePrinter, self)._print_Relational(expr)\n268:    def _print_ITE(self, expr):\n272:    def _print_Sum(self, expr):\n283:    def _print_ImaginaryUnit(self, expr):\n286:    def _print_MatrixBase(self, expr):\n291:    _print_SparseMatrix = \\\n292:        _print_MutableSparseMatrix = \\\n293:        _print_ImmutableSparseMatrix = \\\n294:        _print_Matrix = \\\n295:        _print_DenseMatrix = \\\n296:        _print_MutableDenseMatrix = \\\n297:        _print_ImmutableMatrix = \\\n298:        _print_ImmutableDenseMatrix = \\\n299:        lambda self, expr: self._print_MatrixBase(expr)\n304:    def _print_FunctionDefinition(self, fd):\n312:    def _print_While(self, whl):\n319:    def _print_Declaration(self, decl):\n325:    def _print_Return(self, ret):\n329:    def _print_Print(self, prnt):\n338:    def _print_Stream(self, strm):\n346:    def _print_NoneToken(self, arg):\n352:    def _print_sign(self, e):\n356:    def _print_Not(self, expr):\n362:    setattr(PythonCodePrinter, '_print_%s' % k, _print_known_func)\n365:    setattr(PythonCodePrinter, '_print_%s' % k, _print_known_const)\n413:    def _print_Float(self, e):\n423:    def _print_Rational(self, e):\n430:    def _print_uppergamma(self, e):\n437:    def _print_lowergamma(self, e):\n443:    def _print_log2(self, e):\n447:    def _print_log1p(self, e):\n452:    setattr(MpmathPrinter, '_print_%s' % k, _print_known_func)\n455:    setattr(MpmathPrinter, '_print_%s' % k, _print_known_const)\n487:    def _print_seq(self, seq):\n494:    def _print_MatMul(self, expr):\n501:    def _print_MatPow(self, expr):\n506:    def _print_Inverse(self, expr):\n511:    def _print_DotProduct(self, expr):\n524:    def _print_Piecewise(self, expr):\n534:    def _print_Relational(self, expr):"
+    },
+    {
+        "step": 6,
+        "thought": "Let me check the test file to understand the issue better:",
+        "action": "str_replace_editor view /testbed/sympy/printing/tests/test_pycode.py",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/tests/test_pycode.py:\n     1\t# -*- coding: utf-8 -*-\n     2\tfrom __future__ import absolute_import\n     3\t\n     4\tfrom sympy.codegen import Assignment\n     5\tfrom sympy.codegen.ast import none\n     6\tfrom sympy.core import Expr, Mod, symbols, Eq, Le, Gt, zoo, oo, Rational\n     7\tfrom sympy.core.numbers import pi\n     8\tfrom sympy.functions import acos, Piecewise, sign\n     9\tfrom sympy.logic import And, Or\n    10\tfrom sympy.matrices import SparseMatrix, MatrixSymbol\n    11\tfrom sympy.printing.pycode import (\n    12\t    MpmathPrinter, NumPyPrinter, PythonCodePrinter, pycode, SciPyPrinter\n    13\t)\n    14\tfrom sympy.utilities.pytest import raises\n    15\t\n    16\tx, y, z = symbols('x y z')\n    17\t\n    18\t\n    19\tdef test_PythonCodePrinter():\n    20\t    prntr = PythonCodePrinter()\n    21\t    assert not prntr.module_imports\n    22\t    assert prntr.doprint(x**y) == 'x**y'\n    23\t    assert prntr.doprint(Mod(x, 2)) == 'x % 2'\n    24\t    assert prntr.doprint(And(x, y)) == 'x and y'\n    25\t    assert prntr.doprint(Or(x, y)) == 'x or y'\n    26\t    assert not prntr.module_imports\n    27\t    assert prntr.doprint(pi) == 'math.pi'\n    28\t    assert prntr.module_imports == {'math': {'pi'}}\n    29\t    assert prntr.doprint(acos(x)) == 'math.acos(x)'\n    30\t    assert prntr.doprint(Assignment(x, 2)) == 'x = 2'\n    31\t    assert prntr.doprint(Piecewise((1, Eq(x, 0)),\n    32\t                        (2, x>6))) == '((1) if (x == 0) else (2) if (x > 6) else None)'\n    33\t    assert prntr.doprint(Piecewise((2, Le(x, 0)),\n    34\t                        (3, Gt(x, 0)), evaluate=False)) == '((2) if (x <= 0) else'\\\n    35\t                                                        ' (3) if (x > 0) else None)'\n    36\t    assert prntr.doprint(sign(x)) == '(0.0 if x == 0 else math.copysign(1, x))'\n    37\t\n    38\t\n    39\tdef test_MpmathPrinter():\n    40\t    p = MpmathPrinter()\n    41\t    assert p.doprint(sign(x)) == 'mpmath.sign(x)'\n    42\t    assert p.doprint(Rational(1, 2)) == 'mpmath.mpf(1)/mpmath.mpf(2)'\n    43\t\n    44\tdef test_NumPyPrinter():\n    45\t    p = NumPyPrinter()\n    46\t    assert p.doprint(sign(x)) == 'numpy.sign(x)'\n    47\t    A = MatrixSymbol(\"A\", 2, 2)\n    48\t    assert p.doprint(A**(-1)) == \"numpy.linalg.inv(A)\"\n    49\t    assert p.doprint(A**5) == \"numpy.linalg.matrix_power(A, 5)\"\n    50\t\n    51\t\n    52\tdef test_SciPyPrinter():\n    53\t    p = SciPyPrinter()\n    54\t    expr = acos(x)\n    55\t    assert 'numpy' not in p.module_imports\n    56\t    assert p.doprint(expr) == 'numpy.arccos(x)'\n    57\t    assert 'numpy' in p.module_imports\n    58\t    assert not any(m.startswith('scipy') for m in p.module_imports)\n    59\t    smat = SparseMatrix(2, 5, {(0, 1): 3})\n    60\t    assert p.doprint(smat) == 'scipy.sparse.coo_matrix([3], ([0], [1]), shape=(2, 5))'\n    61\t    assert 'scipy.sparse' in p.module_imports\n    62\t\n    63\t\n    64\tdef test_pycode_reserved_words():\n    65\t    s1, s2 = symbols('if else')\n    66\t    raises(ValueError, lambda: pycode(s1 + s2, error_on_reserved=True))\n    67\t    py_str = pycode(s1 + s2)\n    68\t    assert py_str in ('else_ + if_', 'if_ + else_')\n    69\t\n    70\t\n    71\tclass CustomPrintedObject(Expr):\n    72\t    def _numpycode(self, printer):\n    73\t        return 'numpy'\n    74\t\n    75\t    def _mpmathcode(self, printer):\n    76\t        return 'mpmath'\n    77\t\n    78\t\n    79\tdef test_printmethod():\n    80\t    obj = CustomPrintedObject()\n    81\t    assert NumPyPrinter().doprint(obj) == 'numpy'\n    82\t    assert MpmathPrinter().doprint(obj) == 'mpmath'\n    83\t\n    84\t\n    85\tdef test_codegen_ast_nodes():\n    86\t    assert pycode(none) == 'None'\n    87\t\n    88\t\n    89\tdef test_issue_14283():\n    90\t    prntr = PythonCodePrinter()\n    91\t\n    92\t    assert prntr.doprint(zoo) == \"float('nan')\"\n    93\t    assert prntr.doprint(-oo) == \"float('-inf')\"\n    94\t\n    95\tdef test_NumPyPrinter_print_seq():\n    96\t    n = NumPyPrinter()\n    97\t\n    98\t    assert n._print_seq(range(2)) == '(0, 1,)'\n    99"
+    },
+    {
+        "step": 7,
+        "thought": "Now let me create a script to reproduce the issue:",
+        "action": "str_replace_editor create /testbed/reproduce_issue.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import pycode\n\np = IndexedBase(\"p\")\nprint(\"Testing pycode with Indexed:\")\nprint(pycode(p[0]))\nprint(\"\\nTesting pycode with Indexed with multiple indices:\")\nprint(pycode(p[0, 1, 2]))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/reproduce_issue.py"
+    },
+    {
+        "step": 8,
+        "thought": "",
+        "action": "cd /testbed && python reproduce_issue.py",
+        "observation": "OBSERVATION:\n/testbed/sympy/solvers/diophantine.py:3185: SyntaxWarning: \"is\" with a literal. Did you mean \"==\"?\n  if feasible is 1:  # it's prime and k == 2\n/testbed/sympy/plotting/plot.py:644: SyntaxWarning: \"is\" with a literal. Did you mean \"==\"?\n  if self.xscale is 'log':\n/testbed/sympy/plotting/plot.py:664: SyntaxWarning: \"is\" with a literal. Did you mean \"==\"?\n  if self.xscale is 'log':\n/testbed/sympy/plotting/plot.py:677: SyntaxWarning: \"is\" with a literal. Did you mean \"==\"?\n  if self.xscale is 'log':\n/testbed/sympy/plotting/plot.py:684: SyntaxWarning: \"is\" with a literal. Did you mean \"==\"?\n  if self.xscale is 'log':\nTesting pycode with Indexed:\n  # Not supported in Python:\n  # Indexed\np[0]\n\nTesting pycode with Indexed with multiple indices:\n  # Not supported in Python:\n  # Indexed\np[0, 1, 2]"
+    },
+    {
+        "step": 9,
+        "thought": "Good! I can see the issue. The output shows the warning \"# Not supported in Python: # Indexed\" before printing the Indexed expression. Let me check how the CodePrinter handles unsupported expressions:",
+        "action": "find /testbed -type f -name \"*.py\" -path \"*/printing/*\" | xargs grep -l \"Not supported\" | head -10",
+        "observation": "OBSERVATION:\n/testbed/sympy/printing/tests/test_julia.py\n/testbed/sympy/printing/tests/test_fcode.py\n/testbed/sympy/printing/tests/test_octave.py\n/testbed/sympy/printing/codeprinter.py"
+    },
+    {
+        "step": 10,
+        "thought": "Let me check the codeprinter.py file:",
+        "action": "grep -n \"Not supported\" /testbed/sympy/printing/codeprinter.py",
+        "observation": "OBSERVATION:\n107:                        \"Not supported in {0}:\".format(self.language)))"
+    },
+    {
+        "step": 11,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/codeprinter.py  --view_range 100 120",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/codeprinter.py:\n   100\t        lines = self._print(expr).splitlines()\n   101\t\n   102\t        # format the output\n   103\t        if self._settings[\"human\"]:\n   104\t            frontlines = []\n   105\t            if self._not_supported:\n   106\t                frontlines.append(self._get_comment(\n   107\t                        \"Not supported in {0}:\".format(self.language)))\n   108\t                for expr in sorted(self._not_supported, key=str):\n   109\t                    frontlines.append(self._get_comment(type(expr).__name__))\n   110\t            for name, value in sorted(self._number_symbols, key=str):\n   111\t                frontlines.append(self._declare_number_const(name, value))\n   112\t            lines = frontlines + lines\n   113\t            lines = self._format_code(lines)\n   114\t            result = \"\\n\".join(lines)\n   115\t        else:\n   116\t            lines = self._format_code(lines)\n   117\t            num_syms = set([(k, self._print(v)) for k, v in self._number_symbols])\n   118\t            result = (num_syms, self._not_supported, \"\\n\".join(lines))\n   119\t        self._not_supported = set()\n   120\t        self._number_symbols = set()"
+    },
+    {
+        "step": 12,
+        "thought": "Now let me check how `_print` method works and where `_not_supported` is populated:",
+        "action": "grep -n \"_not_supported\" /testbed/sympy/printing/codeprinter.py",
+        "observation": "OBSERVATION:\n97:        self._not_supported = set()\n105:            if self._not_supported:\n108:                for expr in sorted(self._not_supported, key=str):\n118:            result = (num_syms, self._not_supported, \"\\n\".join(lines))\n119:        self._not_supported = set()\n384:            return self._print_not_supported(expr)\n423:            return self._print_not_supported(expr)\n430:            return self._print_not_supported(expr)\n490:    def _print_not_supported(self, expr):\n491:        self._not_supported.add(expr)\n495:    _print_Basic = _print_not_supported\n496:    _print_ComplexInfinity = _print_not_supported\n497:    _print_Derivative = _print_not_supported\n498:    _print_ExprCondPair = _print_not_supported\n499:    _print_GeometryEntity = _print_not_supported\n500:    _print_Infinity = _print_not_supported\n501:    _print_Integral = _print_not_supported\n502:    _print_Interval = _print_not_supported\n503:    _print_AccumulationBounds = _print_not_supported\n504:    _print_Limit = _print_not_supported\n505:    _print_Matrix = _print_not_supported\n506:    _print_ImmutableMatrix = _print_not_supported\n507:    _print_ImmutableDenseMatrix = _print_not_supported\n508:    _print_MutableDenseMatrix = _print_not_supported\n509:    _print_MatrixBase = _print_not_supported\n510:    _print_DeferredVector = _print_not_supported\n511:    _print_NaN = _print_not_supported\n512:    _print_NegativeInfinity = _print_not_supported\n513:    _print_Order = _print_not_supported\n514:    _print_RootOf = _print_not_supported\n515:    _print_RootsOf = _print_not_supported\n516:    _print_RootSum = _print_not_supported\n517:    _print_SparseMatrix = _print_not_supported\n518:    _print_MutableSparseMatrix = _print_not_supported\n519:    _print_ImmutableSparseMatrix = _print_not_supported\n520:    _print_Uniform = _print_not_supported\n521:    _print_Unit = _print_not_supported\n522:    _print_Wild = _print_not_supported\n523:    _print_WildFunction = _print_not_supported"
+    },
+    {
+        "step": 13,
+        "thought": "So when a printer doesn't have a `_print_Indexed` method, it falls back to `_print_not_supported` which adds it to the `_not_supported` set and returns the string representation. Let me check if Indexed is defined in sympy:",
+        "action": "cd /testbed && python -c \"from sympy import IndexedBase, Indexed; p = IndexedBase('p'); print(type(p[0])); print(p[0].__class__.__name__)\"",
+        "observation": "OBSERVATION:\n<class 'sympy.tensor.indexed.Indexed'>\nIndexed"
+    },
+    {
+        "step": 14,
+        "thought": "Good, so we need to add a `_print_Indexed` method to `PythonCodePrinter`. Let me check if there are any other printers that might already handle Indexed:",
+        "action": "find /testbed -type f -name \"*.py\" -path \"*/printing/*\" | xargs grep -l \"_print_Indexed\" | head -10",
+        "observation": "OBSERVATION:\n/testbed/sympy/printing/glsl.py\n/testbed/sympy/printing/jscode.py\n/testbed/sympy/printing/tests/test_rcode.py\n/testbed/sympy/printing/tests/test_mathml.py\n/testbed/sympy/printing/tests/test_ccode.py\n/testbed/sympy/printing/tests/test_jscode.py\n/testbed/sympy/printing/tests/test_glsl.py\n/testbed/sympy/printing/rust.py\n/testbed/sympy/printing/octave.py\n/testbed/sympy/printing/mathml.py"
+    },
+    {
+        "step": 15,
+        "thought": "Let me check one of these to see how they implement `_print_Indexed`:",
+        "action": "grep -n \"_print_Indexed\" /testbed/sympy/printing/octave.py",
+        "observation": "OBSERVATION:\n381:    def _print_Indexed(self, expr):"
+    },
+    {
+        "step": 16,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/octave.py  --view_range 381 390",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/octave.py:\n   381\t    def _print_Indexed(self, expr):\n   382\t        inds = [ self._print(i) for i in expr.indices ]\n   383\t        return \"%s(%s)\" % (self._print(expr.base.label), \", \".join(inds))\n   384\t\n   385\t\n   386\t    def _print_Idx(self, expr):\n   387\t        return self._print(expr.label)\n   388\t\n   389\t\n   390\t    def _print_KroneckerDelta(self, expr):"
+    },
+    {
+        "step": 17,
+        "thought": "Let me check the ccode printer:",
+        "action": "grep -n \"_print_Indexed\" /testbed/sympy/printing/ccode.py",
+        "observation": "OBSERVATION:\n303:    def _print_Indexed(self, expr):"
+    },
+    {
+        "step": 18,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/ccode.py  --view_range 303 310",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/ccode.py:\n   303\t    def _print_Indexed(self, expr):\n   304\t        # calculate index for 1d array\n   305\t        offset = getattr(expr.base, 'offset', S.Zero)\n   306\t        strides = getattr(expr.base, 'strides', None)\n   307\t        indices = expr.indices\n   308\t\n   309\t        if strides is None or isinstance(strides, string_types):\n   310\t            dims = expr.shape"
+    },
+    {
+        "step": 19,
+        "thought": "Let me check the rcode printer:",
+        "action": "grep -n \"_print_Indexed\" /testbed/sympy/printing/rcode.py",
+        "observation": "OBSERVATION:\n161:    def _print_Indexed(self, expr):"
+    },
+    {
+        "step": 20,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/rcode.py  --view_range 161 170",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/rcode.py:\n   161\t    def _print_Indexed(self, expr):\n   162\t        inds = [ self._print(i) for i in expr.indices ]\n   163\t        return \"%s[%s]\" % (self._print(expr.base.label), \", \".join(inds))\n   164\t\n   165\t    def _print_Idx(self, expr):\n   166\t        return self._print(expr.label)\n   167\t\n   168\t    def _print_Exp1(self, expr):\n   169\t        return \"exp(1)\"\n   170"
+    },
+    {
+        "step": 21,
+        "thought": "Good! So the rcode printer has a simple implementation similar to what's suggested in the PR description. Let me check what attributes an Indexed object has:",
+        "action": "str_replace_editor create /testbed/test_indexed.py --file_text 'from sympy import *\np = IndexedBase(\"p\")\nidx = p[0, 1, 2]\nprint(\"Type:\", type(idx))\nprint(\"Class name:\", idx.__class__.__name__)\nprint(\"Args:\", idx.args)\nprint(\"Base:\", idx.base)\nprint(\"Indices:\", idx.indices)\nprint(\"Shape:\", idx.shape)\nprint(\"Rank:\", idx.rank)'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_indexed.py"
+    },
+    {
+        "step": 22,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed.py",
+        "observation": "OBSERVATION:\nType: <class 'sympy.tensor.indexed.Indexed'>\nClass name: Indexed\nArgs: (p, 0, 1, 2)\nBase: p\nIndices: (0, 1, 2)\nTraceback (most recent call last):\n  File \"/testbed/test_indexed.py\", line 9, in <module>\n    print(\"Shape:\", idx.shape)\n  File \"/testbed/sympy/tensor/indexed.py\", line 273, in shape\n    raise IndexException(filldedent(\"\"\"\nsympy.tensor.indexed.IndexException: \nRange is not defined for all indices in: p[0, 1, 2]"
+    },
+    {
+        "step": 23,
+        "thought": "Good, so `idx.args` contains `(base, *indices)`. Now let me look at the PR description again. It suggests adding:\n```python\ndef _print_Indexed(self, expr):\n    base, *index = expr.args\n    return \"{}[{}]\".format(str(base), \", \".join([self._print(ind) for ind in index]))\n```\n\nBut looking at the rcode implementation, it uses `expr.base.label` and `expr.indices`. Let me check what `expr.base.label` is:",
+        "action": "str_replace_editor create /testbed/test_indexed2.py --file_text 'from sympy import *\np = IndexedBase(\"p\")\nidx = p[0, 1, 2]\nprint(\"Base:\", idx.base)\nprint(\"Base type:\", type(idx.base))\nprint(\"Base label:\", idx.base.label)\nprint(\"Base label type:\", type(idx.base.label))\nprint(\"Base args:\", idx.base.args)\nprint(\"Base name:\", idx.base.name)'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_indexed2.py"
+    },
+    {
+        "step": 24,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed2.py",
+        "observation": "OBSERVATION:\nBase: p\nBase type: <class 'sympy.tensor.indexed.IndexedBase'>\nBase label: p\nBase label type: <class 'sympy.core.symbol.Symbol'>\nBase args: (p,)\nBase name: p"
+    },
+    {
+        "step": 25,
+        "thought": "So `expr.base.label` gives us the Symbol `p`. But actually, we should print `expr.base` directly using `self._print(expr.base)` to handle any special formatting. Let me check how other printers handle this:",
+        "action": "grep -B2 -A2 \"_print_Indexed\" /testbed/sympy/printing/jscode.py",
+        "observation": "OBSERVATION:\n        return '%d/%d' % (p, q)\n\n    def _print_Indexed(self, expr):\n        # calculate index for 1d array\n        dims = expr.shape"
+    },
+    {
+        "step": 26,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/jscode.py  --view_range 200 220",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/jscode.py:\n   200\t                continue\n   201\t            level -= decrease[n]\n   202\t            pretty.append(\"%s%s\" % (tab*level, line))\n   203\t            level += increase[n]\n   204\t        return pretty\n   205\t\n   206\t\n   207\tdef jscode(expr, assign_to=None, **settings):\n   208\t    \"\"\"Converts an expr to a string of javascript code\n   209\t\n   210\t    Parameters\n   211\t    ==========\n   212\t\n   213\t    expr : Expr\n   214\t        A sympy expression to be converted.\n   215\t    assign_to : optional\n   216\t        When given, the argument is used as the name of the variable to which\n   217\t        the expression is assigned. Can be a string, ``Symbol``,\n   218\t        ``MatrixSymbol``, or ``Indexed`` type. This is helpful in case of\n   219\t        line-wrapping, or for expressions that generate multi-line statements.\n   220\t    precision : integer, optional"
+    },
+    {
+        "step": 27,
+        "thought": "Let me search for the actual implementation:",
+        "action": "grep -n \"def _print_Indexed\" /testbed/sympy/printing/jscode.py",
+        "observation": "OBSERVATION:\n116:    def _print_Indexed(self, expr):"
+    },
+    {
+        "step": 28,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/jscode.py  --view_range 116 130",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/jscode.py:\n   116\t    def _print_Indexed(self, expr):\n   117\t        # calculate index for 1d array\n   118\t        dims = expr.shape\n   119\t        elem = S.Zero\n   120\t        offset = S.One\n   121\t        for i in reversed(range(expr.rank)):\n   122\t            elem += expr.indices[i]*offset\n   123\t            offset *= dims[i]\n   124\t        return \"%s[%s]\" % (self._print(expr.base.label), self._print(elem))\n   125\t\n   126\t    def _print_Idx(self, expr):\n   127\t        return self._print(expr.label)\n   128\t\n   129\t    def _print_Exp1(self, expr):\n   130\t        return \"Math.E\""
+    },
+    {
+        "step": 29,
+        "thought": "Interesting, jscode flattens multi-dimensional indices. But for Python, we should probably just print them as multi-dimensional indices like `p[0, 1, 2]`. Let me check the glsl printer:",
+        "action": "grep -n \"def _print_Indexed\" /testbed/sympy/printing/glsl.py",
+        "observation": "OBSERVATION:\n250:    def _print_Indexed(self, expr):"
+    },
+    {
+        "step": 30,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/glsl.py  --view_range 250 260",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/glsl.py:\n   250\t    def _print_Indexed(self, expr):\n   251\t        # calculate index for 1d array\n   252\t        dims = expr.shape\n   253\t        elem = S.Zero\n   254\t        offset = S.One\n   255\t        for i in reversed(range(expr.rank)):\n   256\t            elem += expr.indices[i]*offset\n   257\t            offset *= dims[i]\n   258\t        return \"%s[%s]\" % (self._print(expr.base.label),\n   259\t                           self._print(elem))\n   260"
+    },
+    {
+        "step": 31,
+        "thought": "So jscode and glsl flatten indices, but rcode and octave use multi-dimensional indexing. For Python, we should use multi-dimensional indexing like `p[0, 1, 2]`. Let me check if there are any tests for Indexed in the test files:",
+        "action": "grep -n \"Indexed\" /testbed/sympy/printing/tests/test_pycode.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 32,
+        "thought": "Let me check if there are any existing tests for Indexed in other printer tests:",
+        "action": "grep -n \"Indexed\" /testbed/sympy/printing/tests/test_rcode.py",
+        "observation": "OBSERVATION:\n11:from sympy.tensor import IndexedBase, Idx\n96:    A = IndexedBase('A')\n203:def test_rcode_Indexed():\n204:    from sympy.tensor import IndexedBase, Idx\n211:    x = IndexedBase('x')[j]\n212:    assert p._print_Indexed(x) == 'x[j]'\n213:    A = IndexedBase('A')[i, j]\n214:    assert p._print_Indexed(A) == 'A[i, j]'\n215:    B = IndexedBase('B')[i, j, k]\n216:    assert p._print_Indexed(B) == 'B[i, j, k]'\n220:def test_rcode_Indexed_without_looking_for_contraction():\n222:    y = IndexedBase('y', shape=(len_y,))\n223:    x = IndexedBase('x', shape=(len_y,))\n224:    Dy = IndexedBase('Dy', shape=(len_y-1,))\n233:    A = IndexedBase('A')\n234:    x = IndexedBase('x')\n235:    y = IndexedBase('y')\n258:    x = IndexedBase('x')\n259:    y = IndexedBase('y')\n272:    from sympy.tensor import IndexedBase, Idx\n275:    A = IndexedBase('A')\n276:    x = IndexedBase('x')\n277:    y = IndexedBase('y')\n278:    z = IndexedBase('z')\n297:    from sympy.tensor import IndexedBase, Idx\n300:    a = IndexedBase('a')\n301:    b = IndexedBase('b')\n302:    y = IndexedBase('y')\n327:    from sympy.tensor import IndexedBase, Idx\n330:    a = IndexedBase('a')\n331:    b = IndexedBase('b')\n332:    c = IndexedBase('c')\n333:    y = IndexedBase('y')\n358:    from sympy.tensor import IndexedBase, Idx\n361:    a = IndexedBase('a')\n362:    b = IndexedBase('b')\n363:    c = IndexedBase('c')\n364:    y = IndexedBase('y')"
+    },
+    {
+        "step": 33,
+        "thought": "Good! So rcode has tests for Indexed. Let me look at the test to understand better:",
+        "action": "str_replace_editor view /testbed/sympy/printing/tests/test_rcode.py  --view_range 203 220",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/tests/test_rcode.py:\n   203\tdef test_rcode_Indexed():\n   204\t    from sympy.tensor import IndexedBase, Idx\n   205\t    from sympy import symbols\n   206\t    n, m, o = symbols('n m o', integer=True)\n   207\t    i, j, k = Idx('i', n), Idx('j', m), Idx('k', o)\n   208\t    p = RCodePrinter()\n   209\t    p._not_r = set()\n   210\t\n   211\t    x = IndexedBase('x')[j]\n   212\t    assert p._print_Indexed(x) == 'x[j]'\n   213\t    A = IndexedBase('A')[i, j]\n   214\t    assert p._print_Indexed(A) == 'A[i, j]'\n   215\t    B = IndexedBase('B')[i, j, k]\n   216\t    assert p._print_Indexed(B) == 'B[i, j, k]'\n   217\t\n   218\t    assert p._not_r == set()\n   219\t\n   220\tdef test_rcode_Indexed_without_looking_for_contraction():"
+    },
+    {
+        "step": 34,
+        "thought": "Perfect! So the rcode printer produces `x[j]`, `A[i, j]`, `B[i, j, k]` for Indexed expressions. This is exactly what we want for Python too. Now let me check the actual implementation in rcode.py again:",
+        "action": "str_replace_editor view /testbed/sympy/printing/rcode.py  --view_range 161 164",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/rcode.py:\n   161\t    def _print_Indexed(self, expr):\n   162\t        inds = [ self._print(i) for i in expr.indices ]\n   163\t        return \"%s[%s]\" % (self._print(expr.base.label), \", \".join(inds))\n   164"
+    },
+    {
+        "step": 35,
+        "thought": "Wait, it uses `expr.base.label`. But actually, we should use `self._print(expr.base)` instead of `self._print(expr.base.label)` to handle any special formatting. Let me check what `expr.base` is:",
+        "action": "str_replace_editor create /testbed/test_indexed3.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import PythonCodePrinter\n\np = IndexedBase(\"p\")\nidx = p[0, 1, 2]\nprinter = PythonCodePrinter()\n\nprint(\"expr.base:\", idx.base)\nprint(\"self._print(expr.base):\", printer._print(idx.base))\nprint(\"expr.base.label:\", idx.base.label)\nprint(\"self._print(expr.base.label):\", printer._print(idx.base.label))\nprint(\"str(expr.base):\", str(idx.base))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_indexed3.py"
+    },
+    {
+        "step": 36,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed3.py",
+        "observation": "OBSERVATION:\nexpr.base: p\nTraceback (most recent call last):\n  File \"/testbed/test_indexed3.py\", line 9, in <module>\n    print(\"self._print(expr.base):\", printer._print(idx.base))\n  File \"/testbed/sympy/printing/printer.py\", line 287, in _print\n    return getattr(self, printmethod)(expr, **kwargs)\n  File \"/testbed/sympy/printing/codeprinter.py\", line 384, in _print_Function\n    return self._print_not_supported(expr)\n  File \"/testbed/sympy/printing/codeprinter.py\", line 491, in _print_not_supported\n    self._not_supported.add(expr)\nAttributeError: 'PythonCodePrinter' object has no attribute '_not_supported'"
+    },
+    {
+        "step": 37,
+        "thought": "Ah, we need to call `doprint` instead. Let me check:",
+        "action": "str_replace_editor str_replace /testbed/test_indexed3.py   --old_str 'from sympy import *\nfrom sympy.printing.pycode import PythonCodePrinter\n\np = IndexedBase(\"p\")\nidx = p[0, 1, 2]\nprinter = PythonCodePrinter()\n\nprint(\"expr.base:\", idx.base)\nprint(\"self._print(expr.base):\", printer._print(idx.base))\nprint(\"expr.base.label:\", idx.base.label)\nprint(\"self._print(expr.base.label):\", printer._print(idx.base.label))\nprint(\"str(expr.base):\", str(idx.base))' --new_str 'from sympy import *\nfrom sympy.printing.pycode import PythonCodePrinter\n\np = IndexedBase(\"p\")\nidx = p[0, 1, 2]\nprinter = PythonCodePrinter()\n\nprint(\"expr.base:\", idx.base)\nprint(\"printer.doprint(expr.base):\", printer.doprint(idx.base))\nprint(\"expr.base.label:\", idx.base.label)\nprint(\"printer.doprint(expr.base.label):\", printer.doprint(idx.base.label))\nprint(\"str(expr.base):\", str(idx.base))'",
+        "observation": "OBSERVATION:\nThe file /testbed/test_indexed3.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test_indexed3.py:\n     1\tfrom sympy import *\n     2\tfrom sympy.printing.pycode import PythonCodePrinter\n     3\t\n     4\tp = IndexedBase(\"p\")\n     5\tidx = p[0, 1, 2]\n     6\tprinter = PythonCodePrinter()\n     7\t\n     8\tprint(\"expr.base:\", idx.base)\n     9\tprint(\"printer.doprint(expr.base):\", printer.doprint(idx.base))\n    10\tprint(\"expr.base.label:\", idx.base.label)\n    11\tprint(\"printer.doprint(expr.base.label):\", printer.doprint(idx.base.label))\n    12\tprint(\"str(expr.base):\", str(idx.base))\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 38,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed3.py",
+        "observation": "OBSERVATION:\nexpr.base: p\nprinter.doprint(expr.base):   # Not supported in Python:\n  # IndexedBase\np\nexpr.base.label: p\nprinter.doprint(expr.base.label): p\nstr(expr.base): p"
+    },
+    {
+        "step": 39,
+        "thought": "Interesting! So `IndexedBase` is also not supported. But actually, when we print `p[0]`, we want to print just `p[0]`, not `p[0]` where `p` is an IndexedBase. The issue is that `expr.base` is an `IndexedBase` object, not a Symbol. But `expr.base.label` is a Symbol. So we should use `self._print(expr.base.label)` like rcode does.\n\nActually, wait. Let me check what happens when we have a more complex base:",
+        "action": "str_replace_editor create /testbed/test_indexed4.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import pycode\n\n# Test with simple IndexedBase\np = IndexedBase(\"p\")\nprint(\"Simple IndexedBase:\")\nprint(pycode(p[0]))\nprint(pycode(p[0, 1, 2]))\n\n# Test with IndexedBase that has offset/strides?\n# Actually, let me check if IndexedBase can have other attributes\nprint(\"\\nChecking IndexedBase attributes:\")\nprint(\"p:\", p)\nprint(\"p.label:\", p.label)\nprint(\"type(p.label):\", type(p.label))\nprint(\"p.args:\", p.args)\nprint(\"p.name:\", p.name)'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_indexed4.py"
+    },
+    {
+        "step": 40,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed4.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nSimple IndexedBase:\n  # Not supported in Python:\n  # Indexed\np[0]\n  # Not supported in Python:\n  # Indexed\np[0, 1, 2]\n\nChecking IndexedBase attributes:\np: p\np.label: p\ntype(p.label): <class 'sympy.core.symbol.Symbol'>\np.args: (p,)\np.name: p"
+    },
+    {
+        "step": 41,
+        "thought": "So `p.label` is a Symbol. Actually, looking back at the PR description, it suggests:\n```python\ndef _print_Indexed(self, expr):\n    base, *index = expr.args\n    return \"{}[{}]\".format(str(base), \", \".join([self._print(ind) for ind in index]))\n```\n\nBut `str(base)` would give us `\"p\"` (the string representation), not `self._print(base)`. Actually, we should use `self._print(expr.base.label)` like rcode does. But wait, let me check if `expr.base` could be something other than an IndexedBase:",
+        "action": "cd /testbed && python -c \"from sympy import *; from sympy.tensor.indexed import Indexed; import inspect; print(inspect.getsource(Indexed.__init__))\"",
+        "observation": "OBSERVATION:\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/opt/miniconda3/envs/testbed/lib/python3.9/inspect.py\", line 1024, in getsource\n    lines, lnum = getsourcelines(object)\n  File \"/opt/miniconda3/envs/testbed/lib/python3.9/inspect.py\", line 1006, in getsourcelines\n    lines, lnum = findsource(object)\n  File \"/opt/miniconda3/envs/testbed/lib/python3.9/inspect.py\", line 817, in findsource\n    file = getsourcefile(object)\n  File \"/opt/miniconda3/envs/testbed/lib/python3.9/inspect.py\", line 697, in getsourcefile\n    filename = getfile(object)\n  File \"/opt/miniconda3/envs/testbed/lib/python3.9/inspect.py\", line 677, in getfile\n    raise TypeError('module, class, method, function, traceback, frame, or '\nTypeError: module, class, method, function, traceback, frame, or code object was expected, got wrapper_descriptor"
+    },
+    {
+        "step": 42,
+        "thought": "Let me check the Indexed class definition:",
+        "action": "find /testbed -type f -name \"*.py\" -path \"*/tensor/*\" | xargs grep -l \"class Indexed\" | head -5",
+        "observation": "OBSERVATION:\n/testbed/sympy/tensor/indexed.py"
+    },
+    {
+        "step": 43,
+        "thought": "",
+        "action": "grep -n \"class Indexed\" /testbed/sympy/tensor/indexed.py",
+        "observation": "OBSERVATION:\n120:class Indexed(Expr):\n334:class IndexedBase(Expr, NotIterable):"
+    },
+    {
+        "step": 44,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/tensor/indexed.py  --view_range 120 180",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/tensor/indexed.py:\n   120\tclass Indexed(Expr):\n   121\t    \"\"\"Represents a mathematical object with indices.\n   122\t\n   123\t    >>> from sympy import Indexed, IndexedBase, Idx, symbols\n   124\t    >>> i, j = symbols('i j', cls=Idx)\n   125\t    >>> Indexed('A', i, j)\n   126\t    A[i, j]\n   127\t\n   128\t    It is recommended that ``Indexed`` objects be created via ``IndexedBase``:\n   129\t\n   130\t    >>> A = IndexedBase('A')\n   131\t    >>> Indexed('A', i, j) == A[i, j]\n   132\t    True\n   133\t\n   134\t    \"\"\"\n   135\t    is_commutative = True\n   136\t    is_Indexed = True\n   137\t    is_symbol = True\n   138\t    is_Atom = True\n   139\t\n   140\t    def __new__(cls, base, *args, **kw_args):\n   141\t        from sympy.utilities.misc import filldedent\n   142\t        from sympy.tensor.array.ndim_array import NDimArray\n   143\t        from sympy.matrices.matrices import MatrixBase\n   144\t\n   145\t        if not args:\n   146\t            raise IndexException(\"Indexed needs at least one index.\")\n   147\t        if isinstance(base, (string_types, Symbol)):\n   148\t            base = IndexedBase(base)\n   149\t        elif not hasattr(base, '__getitem__') and not isinstance(base, IndexedBase):\n   150\t            raise TypeError(filldedent(\"\"\"\n   151\t                Indexed expects string, Symbol, or IndexedBase as base.\"\"\"))\n   152\t        args = list(map(sympify, args))\n   153\t        if isinstance(base, (NDimArray, Iterable, Tuple, MatrixBase)) and all([i.is_number for i in args]):\n   154\t            if len(args) == 1:\n   155\t                return base[args[0]]\n   156\t            else:\n   157\t                return base[args]\n   158\t\n   159\t        return Expr.__new__(cls, base, *args, **kw_args)\n   160\t\n   161\t    @property\n   162\t    def name(self):\n   163\t        return str(self)\n   164\t\n   165\t    @property\n   166\t    def _diff_wrt(self):\n   167\t        \"\"\"Allow derivatives with respect to an ``Indexed`` object.\"\"\"\n   168\t        return True\n   169\t\n   170\t    def _eval_derivative(self, wrt):\n   171\t        from sympy.tensor.array.ndim_array import NDimArray\n   172\t\n   173\t        if isinstance(wrt, Indexed) and wrt.base == self.base:\n   174\t            if len(self.indices) != len(wrt.indices):\n   175\t                msg = \"Different # of indices: d({!s})/d({!s})\".format(self,\n   176\t                                                                       wrt)\n   177\t                raise IndexException(msg)\n   178\t            result = S.One\n   179\t            for index1, index2 in zip(self.indices, wrt.indices):\n   180\t                result *= KroneckerDelta(index1, index2)"
+    },
+    {
+        "step": 45,
+        "thought": "So `Indexed` can take a base that is a string, Symbol, or IndexedBase. In line 148, if base is a string or Symbol, it converts it to IndexedBase. So `expr.base` should always be an IndexedBase (or maybe NDimArray, Iterable, Tuple, MatrixBase according to line 153). \n\nActually, looking at line 153-157, if base is an NDimArray, Iterable, Tuple, or MatrixBase and all indices are numbers, it returns `base[args[0]]` or `base[args]` directly. So `Indexed` might not even be created in that case.\n\nSo for our `_print_Indexed` method, `expr.base` should be an IndexedBase (or potentially other types). We should use `self._print(expr.base)` to print it, not `self._print(expr.base.label)`. But wait, `expr.base` is an IndexedBase which isn't supported by PythonCodePrinter. So we need to handle IndexedBase too, or we need to print it differently.\n\nActually, let me check how other printers handle IndexedBase:",
+        "action": "grep -n \"_print_IndexedBase\" /testbed/sympy/printing/rcode.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 46,
+        "thought": "",
+        "action": "grep -n \"_print_IndexedBase\" /testbed/sympy/printing/octave.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 47,
+        "thought": "So rcode and octave don't have `_print_IndexedBase` methods. They just print `expr.base.label` in `_print_Indexed`. Let me check what happens when we try to print an IndexedBase directly:",
+        "action": "str_replace_editor create /testbed/test_indexed5.py --file_text 'from sympy import *\nfrom sympy.printing.rcode import rcode\n\np = IndexedBase(\"p\")\nprint(\"rcode(p):\", rcode(p))\nprint(\"rcode(p[0]):\", rcode(p[0]))\nprint(\"rcode(p[0, 1, 2]):\", rcode(p[0, 1, 2]))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_indexed5.py"
+    },
+    {
+        "step": 48,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed5.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nrcode(p): // Not supported in R:\n// IndexedBase\np\nrcode(p[0]): p[0]\nrcode(p[0, 1, 2]): p[0, 1, 2]"
+    },
+    {
+        "step": 49,
+        "thought": "Interesting! So rcode also doesn't support IndexedBase directly, but it can print Indexed expressions. So when we print `p[0]`, the `_print_Indexed` method is called, which prints `expr.base.label` (which is `p`). So we should do the same for PythonCodePrinter.\n\nActually, wait. Let me check the PR description again. It says:\n```\ndef _print_Indexed(self, expr):\n    base, *index = expr.args\n    return \"{}[{}]\".format(str(base), \", \".join([self._print(ind) for ind in index]))\n```\n\nThis uses `str(base)` not `self._print(base)`. And `base` would be the IndexedBase object. `str(base)` would give `\"p\"`. But actually, we should use `self._print(base.label)` like rcode does, or maybe `self._print(base)` if we add `_print_IndexedBase`.\n\nLet me check if we should add `_print_IndexedBase` too:",
+        "action": "str_replace_editor create /testbed/test_indexed6.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import PythonCodePrinter\n\n# Let'\"'\"'s see what happens when we try to print an IndexedBase\np = IndexedBase(\"p\")\nprinter = PythonCodePrinter()\n\n# Check what methods are available\nprint(\"Has _print_Indexed?\", hasattr(printer, '\"'\"'_print_Indexed'\"'\"'))\nprint(\"Has _print_IndexedBase?\", hasattr(printer, '\"'\"'_print_IndexedBase'\"'\"'))\n\n# Try to see what str(p) gives\nprint(\"str(p):\", str(p))\nprint(\"p:\", p)\nprint(\"repr(p):\", repr(p))\n\n# What about p.label?\nprint(\"p.label:\", p.label)\nprint(\"type(p.label):\", type(p.label))\nprint(\"str(p.label):\", str(p.label))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_indexed6.py"
+    },
+    {
+        "step": 50,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed6.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nHas _print_Indexed? False\nHas _print_IndexedBase? False\nstr(p): p\np: p\nrepr(p): p\np.label: p\ntype(p.label): <class 'sympy.core.symbol.Symbol'>\nstr(p.label): p"
+    },
+    {
+        "step": 51,
+        "thought": "So `str(p)` gives `\"p\"`. Actually, I think the PR description's suggestion of using `str(base)` is fine because `base` is an IndexedBase and `str(base)` returns the label as a string. But actually, we should use `self._print(base.label)` to be consistent with other printers and to handle any special formatting (like if the label has special characters).\n\nActually, let me check what `self._print(base.label)` would do vs `str(base)`:",
+        "action": "str_replace_editor create /testbed/test_indexed7.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import PythonCodePrinter\n\n# Test with a symbol that might need special handling\nx = symbols(\"x\")\np = IndexedBase(x)  # Use a Symbol as label, not a string\nprint(\"p:\", p)\nprint(\"p.label:\", p.label)\nprint(\"type(p.label):\", type(p.label))\n\nidx = p[0, 1]\nprint(\"idx:\", idx)\nprint(\"idx.base:\", idx.base)\nprint(\"idx.base.label:\", idx.base.label)\n\nprinter = PythonCodePrinter()\nprint(\"\\nprinter.doprint(idx.base.label):\", printer.doprint(idx.base.label))\nprint(\"str(idx.base):\", str(idx.base))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_indexed7.py"
+    },
+    {
+        "step": 52,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed7.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\np: x\np.label: x\ntype(p.label): <class 'sympy.core.symbol.Symbol'>\nidx: x[0, 1]\nidx.base: x\nidx.base.label: x\n\nprinter.doprint(idx.base.label): x\nstr(idx.base): x"
+    },
+    {
+        "step": 53,
+        "thought": "OK so both give the same result. But actually, `self._print(base.label)` is better because it handles the printing properly (e.g., if we need to escape reserved words, etc.). Let me check if PythonCodePrinter handles reserved words:",
+        "action": "str_replace_editor create /testbed/test_reserved.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import pycode\n\n# Test with a reserved word\nif_sym = symbols(\"if\")\np = IndexedBase(if_sym)\nprint(\"IndexedBase with reserved word '\"'\"'if'\"'\"':\")\nprint(pycode(p[0]))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_reserved.py"
+    },
+    {
+        "step": 54,
+        "thought": "",
+        "action": "cd /testbed && python test_reserved.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nIndexedBase with reserved word 'if':\n  # Not supported in Python:\n  # Indexed\nif[0]"
+    },
+    {
+        "step": 55,
+        "thought": "Hmm, it prints `if[0]` which is not valid Python because `if` is a keyword. So we need to use `self._print(base.label)` which should handle reserved words. Let me check how PythonCodePrinter handles reserved words for symbols:",
+        "action": "str_replace_editor create /testbed/test_reserved2.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import pycode\n\n# Test with a reserved word\nif_sym = symbols(\"if\")\nprint(\"pycode(if_sym):\", pycode(if_sym))\nprint(\"pycode(if_sym + 1):\", pycode(if_sym + 1))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_reserved2.py"
+    },
+    {
+        "step": 56,
+        "thought": "",
+        "action": "cd /testbed && python test_reserved2.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\npycode(if_sym): if_\npycode(if_sym + 1): if_ + 1"
+    },
+    {
+        "step": 57,
+        "thought": "Good! So `pycode` automatically appends `_` to reserved words. So we should use `self._print(base.label)` not `str(base)`. \n\nNow, let me implement the fix. I need to add `_print_Indexed` to `PythonCodePrinter`. Actually, looking at the code structure, `PythonCodePrinter` inherits from `AbstractPythonCodePrinter`. Should I add it to `PythonCodePrinter` or `AbstractPythonCodePrinter`? Let me check if other printers (NumPyPrinter, MpmathPrinter, SciPyPrinter) inherit from PythonCodePrinter:",
+        "action": "grep -n \"class NumPyPrinter\" /testbed/sympy/printing/pycode.py",
+        "observation": "OBSERVATION:\n473:class NumPyPrinter(PythonCodePrinter):"
+    },
+    {
+        "step": 58,
+        "thought": "",
+        "action": "grep -n \"class MpmathPrinter\" /testbed/sympy/printing/pycode.py",
+        "observation": "OBSERVATION:\n402:class MpmathPrinter(PythonCodePrinter):"
+    },
+    {
+        "step": 59,
+        "thought": "",
+        "action": "grep -n \"class SciPyPrinter\" /testbed/sympy/printing/pycode.py",
+        "observation": "OBSERVATION:\n700:class SciPyPrinter(NumPyPrinter):"
+    },
+    {
+        "step": 60,
+        "thought": "So `NumPyPrinter` and `MpmathPrinter` inherit from `PythonCodePrinter`, and `SciPyPrinter` inherits from `NumPyPrinter`. So if I add `_print_Indexed` to `PythonCodePrinter`, all of them will inherit it. That's probably what we want.\n\nActually, wait. Let me check if NumPyPrinter or other printers might need different handling for Indexed. Let me check if any of them already have `_print_Indexed`:",
+        "action": "grep -n \"_print_Indexed\" /testbed/sympy/printing/pycode.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 61,
+        "thought": "None of them have it. So we should add it to `PythonCodePrinter`. Actually, looking at the PR description again, it says to add it to `PythonCodePrinter`. So let me add it.\n\nBut wait, I should also check if we need to handle `IndexedBase` separately. Actually, when we print `p[0]`, we're printing an `Indexed` object, not an `IndexedBase`. The `_print_Indexed` method will be called. We don't need `_print_IndexedBase` unless someone tries to print an IndexedBase directly (like `pycode(p)` where `p` is IndexedBase). But that's probably rare, and it would just show \"Not supported\" which is fine.\n\nActually, let me check the ccode printer to see if it has `_print_IndexedBase`:",
+        "action": "grep -n \"_print_IndexedBase\" /testbed/sympy/printing/ccode.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 62,
+        "thought": "No. So we don't need `_print_IndexedBase`.\n\nNow let me implement the fix. First, let me look at where to add it in the file:",
+        "action": "str_replace_editor view /testbed/sympy/printing/pycode.py  --view_range 350 370",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/pycode.py:\n   350\tclass PythonCodePrinter(AbstractPythonCodePrinter):\n   351\t\n   352\t    def _print_sign(self, e):\n   353\t        return '(0.0 if {e} == 0 else {f}(1, {e}))'.format(\n   354\t            f=self._module_format('math.copysign'), e=self._print(e.args[0]))\n   355\t\n   356\t    def _print_Not(self, expr):\n   357\t        PREC = precedence(expr)\n   358\t        return self._operators['not'] + self.parenthesize(expr.args[0], PREC)\n   359\t\n   360\t\n   361\tfor k in PythonCodePrinter._kf:\n   362\t    setattr(PythonCodePrinter, '_print_%s' % k, _print_known_func)\n   363\t\n   364\tfor k in _known_constants_math:\n   365\t    setattr(PythonCodePrinter, '_print_%s' % k, _print_known_const)\n   366\t\n   367\t\n   368\tdef pycode(expr, **settings):\n   369\t    \"\"\" Converts an expr to a string of Python code\n   370"
+    },
+    {
+        "step": 63,
+        "thought": "I should add the `_print_Indexed` method in the `PythonCodePrinter` class. Let me add it after `_print_Not`:",
+        "action": "str_replace_editor str_replace /testbed/sympy/printing/pycode.py   --old_str 'class PythonCodePrinter(AbstractPythonCodePrinter):\n\n    def _print_sign(self, e):\n        return '\"'\"'(0.0 if {e} == 0 else {f}(1, {e}))'\"'\"'.format(\n            f=self._module_format('\"'\"'math.copysign'\"'\"'), e=self._print(e.args[0]))\n\n    def _print_Not(self, expr):\n        PREC = precedence(expr)\n        return self._operators['\"'\"'not'\"'\"'] + self.parenthesize(expr.args[0], PREC)' --new_str 'class PythonCodePrinter(AbstractPythonCodePrinter):\n\n    def _print_sign(self, e):\n        return '\"'\"'(0.0 if {e} == 0 else {f}(1, {e}))'\"'\"'.format(\n            f=self._module_format('\"'\"'math.copysign'\"'\"'), e=self._print(e.args[0]))\n\n    def _print_Not(self, expr):\n        PREC = precedence(expr)\n        return self._operators['\"'\"'not'\"'\"'] + self.parenthesize(expr.args[0], PREC)\n\n    def _print_Indexed(self, expr):\n        inds = [self._print(i) for i in expr.indices]\n        return \"%s[%s]\" % (self._print(expr.base.label), \", \".join(inds))'",
+        "observation": "OBSERVATION:\nThe file /testbed/sympy/printing/pycode.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/sympy/printing/pycode.py:\n   345\t\n   346\t    def _print_NoneToken(self, arg):\n   347\t        return 'None'\n   348\t\n   349\t\n   350\tclass PythonCodePrinter(AbstractPythonCodePrinter):\n   351\t\n   352\t    def _print_sign(self, e):\n   353\t        return '(0.0 if {e} == 0 else {f}(1, {e}))'.format(\n   354\t            f=self._module_format('math.copysign'), e=self._print(e.args[0]))\n   355\t\n   356\t    def _print_Not(self, expr):\n   357\t        PREC = precedence(expr)\n   358\t        return self._operators['not'] + self.parenthesize(expr.args[0], PREC)\n   359\t\n   360\t    def _print_Indexed(self, expr):\n   361\t        inds = [self._print(i) for i in expr.indices]\n   362\t        return \"%s[%s]\" % (self._print(expr.base.label), \", \".join(inds))\n   363\t\n   364\t\n   365\tfor k in PythonCodePrinter._kf:\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 64,
+        "thought": "Now let me test if this works:",
+        "action": "cd /testbed && python reproduce_issue.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nTesting pycode with Indexed:\np[0]\n\nTesting pycode with Indexed with multiple indices:\np[0, 1, 2]"
+    },
+    {
+        "step": 65,
+        "thought": "Great! The warning is gone. Let me test more cases:",
+        "action": "str_replace_editor create /testbed/test_more_cases.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import pycode\n\n# Test 1: Simple Indexed\np = IndexedBase(\"p\")\nprint(\"Test 1 - Simple Indexed:\")\nprint(pycode(p[0]))\nprint(pycode(p[0, 1, 2]))\n\n# Test 2: Indexed with symbolic indices\ni, j, k = symbols('\"'\"'i j k'\"'\"')\nprint(\"\\nTest 2 - Indexed with symbolic indices:\")\nprint(pycode(p[i]))\nprint(pycode(p[i, j]))\nprint(pycode(p[i, j, k]))\n\n# Test 3: Indexed with expressions as indices\nprint(\"\\nTest 3 - Indexed with expressions as indices:\")\nprint(pycode(p[i+1]))\nprint(pycode(p[2*i + j]))\n\n# Test 4: Indexed with reserved word as label\nif_sym = symbols(\"if\")\nq = IndexedBase(if_sym)\nprint(\"\\nTest 4 - Indexed with reserved word label:\")\nprint(pycode(q[0]))\nprint(pycode(q[i]))\n\n# Test 5: Test with NumPyPrinter\nfrom sympy.printing.pycode import NumPyPrinter\nnumpy_printer = NumPyPrinter()\nprint(\"\\nTest 5 - NumPyPrinter:\")\nprint(numpy_printer.doprint(p[0]))\nprint(numpy_printer.doprint(p[i, j]))\n\n# Test 6: Test with MpmathPrinter\nfrom sympy.printing.pycode import MpmathPrinter\nmpmath_printer = MpmathPrinter()\nprint(\"\\nTest 6 - MpmathPrinter:\")\nprint(mpmath_printer.doprint(p[0]))\nprint(mpmath_printer.doprint(p[i, j]))\n\n# Test 7: Test lambdify\nprint(\"\\nTest 7 - lambdify:\")\nf = lambdify([p, i], p[i], \"numpy\")\nprint(\"Function created successfully\")\n# Can'\"'\"'t actually call it without numpy installed, but that'\"'\"'s OK\n\n# Test 8: Complex expression with Indexed\nprint(\"\\nTest 8 - Complex expression:\")\nexpr = p[i] + p[j] * p[k]\nprint(pycode(expr))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_more_cases.py"
+    },
+    {
+        "step": 66,
+        "thought": "",
+        "action": "cd /testbed && python test_more_cases.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nTest 1 - Simple Indexed:\np[0]\np[0, 1, 2]\n\nTest 2 - Indexed with symbolic indices:\np[i]\np[i, j]\np[i, j, k]\n\nTest 3 - Indexed with expressions as indices:\np[i + 1]\np[2*i + j]\n\nTest 4 - Indexed with reserved word label:\nif_[0]\nif_[i]\n\nTest 5 - NumPyPrinter:\np[0]\np[i, j]\n\nTest 6 - MpmathPrinter:\np[0]\np[i, j]\n\nTest 7 - lambdify:\nTraceback (most recent call last):\n  File \"/testbed/test_more_cases.py\", line 45, in <module>\n    f = lambdify([p, i], p[i], \"numpy\")\n  File \"/testbed/sympy/utilities/lambdify.py\", line 694, in lambdify\n    buf = _get_namespace(m)\n  File \"/testbed/sympy/utilities/lambdify.py\", line 812, in _get_namespace\n    _import(m)\n  File \"/testbed/sympy/utilities/lambdify.py\", line 153, in _import\n    raise ImportError(\nImportError: can't import 'numpy' with 'import numpy; from numpy import *; from numpy.linalg import *' command"
+    },
+    {
+        "step": 67,
+        "thought": "Good! The Indexed printing works. The lambdify test fails because numpy isn't installed, but that's not related to our change. Let me fix the test to not use numpy:",
+        "action": "str_replace_editor str_replace /testbed/test_more_cases.py   --old_str '# Test 7: Test lambdify\nprint(\"\\nTest 7 - lambdify:\")\nf = lambdify([p, i], p[i], \"numpy\")\nprint(\"Function created successfully\")\n# Can'\"'\"'t actually call it without numpy installed, but that'\"'\"'s OK' --new_str '# Test 7: Test lambdify with python\nprint(\"\\nTest 7 - lambdify with python:\")\nf = lambdify([p, i], p[i], \"python\")\nprint(\"Function created successfully\")\n# Can'\"'\"'t actually call it without proper arguments, but that'\"'\"'s OK'",
+        "observation": "OBSERVATION:\nThe file /testbed/test_more_cases.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test_more_cases.py:\n    38\tmpmath_printer = MpmathPrinter()\n    39\tprint(\"\\nTest 6 - MpmathPrinter:\")\n    40\tprint(mpmath_printer.doprint(p[0]))\n    41\tprint(mpmath_printer.doprint(p[i, j]))\n    42\t\n    43\t# Test 7: Test lambdify with python\n    44\tprint(\"\\nTest 7 - lambdify with python:\")\n    45\tf = lambdify([p, i], p[i], \"python\")\n    46\tprint(\"Function created successfully\")\n    47\t# Can't actually call it without proper arguments, but that's OK\n    48\t\n    49\t# Test 8: Complex expression with Indexed\n    50\tprint(\"\\nTest 8 - Complex expression:\")\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 68,
+        "thought": "",
+        "action": "cd /testbed && python test_more_cases.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nTest 1 - Simple Indexed:\np[0]\np[0, 1, 2]\n\nTest 2 - Indexed with symbolic indices:\np[i]\np[i, j]\np[i, j, k]\n\nTest 3 - Indexed with expressions as indices:\np[i + 1]\np[2*i + j]\n\nTest 4 - Indexed with reserved word label:\nif_[0]\nif_[i]\n\nTest 5 - NumPyPrinter:\np[0]\np[i, j]\n\nTest 6 - MpmathPrinter:\np[0]\np[i, j]\n\nTest 7 - lambdify with python:\nTraceback (most recent call last):\n  File \"/testbed/sympy/utilities/lambdify.py\", line 124, in _import\n    namespace, namespace_default, translations, import_commands = MODULES[\nKeyError: 'python'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/testbed/test_more_cases.py\", line 45, in <module>\n    f = lambdify([p, i], p[i], \"python\")\n  File \"/testbed/sympy/utilities/lambdify.py\", line 694, in lambdify\n    buf = _get_namespace(m)\n  File \"/testbed/sympy/utilities/lambdify.py\", line 812, in _get_namespace\n    _import(m)\n  File \"/testbed/sympy/utilities/lambdify.py\", line 127, in _import\n    raise NameError(\nNameError: 'python' module can't be used for lambdification"
+    },
+    {
+        "step": 69,
+        "thought": "OK, lambdify doesn't support \"python\" module. That's fine. The important thing is that our Indexed printing works. Now let me run the existing tests to make sure we didn't break anything:",
+        "action": "cd /testbed && python -m pytest sympy/printing/tests/test_pycode.py -xvs",
+        "observation": "OBSERVATION:\n/opt/miniconda3/envs/testbed/bin/python: No module named pytest"
+    },
+    {
+        "step": 70,
+        "thought": "",
+        "action": "cd /testbed && python -c \"import sys; sys.path.insert(0, '.'); from sympy.printing.tests.test_pycode import *; test_PythonCodePrinter(); print('test_PythonCodePrinter passed'); test_MpmathPrinter(); print('test_MpmathPrinter passed'); test_NumPyPrinter(); print('test_NumPyPrinter passed'); test_SciPyPrinter(); print('test_SciPyPrinter passed'); test_pycode_reserved_words(); print('test_pycode_reserved_words passed'); test_printmethod(); print('test_printmethod passed'); test_codegen_ast_nodes(); print('test_codegen_ast_nodes passed'); test_issue_14283(); print('test_issue_14283 passed'); test_NumPyPrinter_print_seq(); print('test_NumPyPrinter_print_seq passed')\"",
+        "observation": "OBSERVATION:\ntest_PythonCodePrinter passed\ntest_MpmathPrinter passed\ntest_NumPyPrinter passed\ntest_SciPyPrinter passed\ntest_pycode_reserved_words passed\ntest_printmethod passed\ntest_codegen_ast_nodes passed\ntest_issue_14283 passed\ntest_NumPyPrinter_print_seq passed"
+    },
+    {
+        "step": 71,
+        "thought": "Great! All existing tests pass. Now let me check if there are any other tests in the repository that might be affected:",
+        "action": "cd /testbed && find . -type f -name \"*.py\" -path \"*/tests/*\" | xargs grep -l \"Indexed\" | head -20",
+        "observation": "OBSERVATION:\n./sympy/sandbox/tests/test_indexed_integrals.py\n./sympy/utilities/tests/test_lambdify.py\n./sympy/utilities/tests/test_codegen_octave.py\n./sympy/utilities/tests/test_codegen.py\n./sympy/utilities/tests/test_codegen_julia.py\n./sympy/core/tests/test_args.py\n./sympy/core/tests/test_function.py\n./sympy/printing/tests/test_rcode.py\n./sympy/printing/tests/test_mathml.py\n./sympy/printing/tests/test_latex.py\n./sympy/printing/tests/test_llvmjit.py\n./sympy/printing/tests/test_ccode.py\n./sympy/printing/tests/test_jscode.py\n./sympy/printing/tests/test_glsl.py\n./sympy/printing/tests/test_rust.py\n./sympy/printing/tests/test_fcode.py\n./sympy/tensor/array/tests/test_immutable_ndim_array.py\n./sympy/tensor/tests/test_indexed.py\n./sympy/tensor/tests/test_index_methods.py\n./sympy/tensor/tests/test_tensor.py"
+    },
+    {
+        "step": 72,
+        "thought": "Let me check the lambdify tests since the PR mentions lambdify:",
+        "action": "cd /testbed && grep -n \"Indexed\" ./sympy/utilities/tests/test_lambdify.py | head -20",
+        "observation": "OBSERVATION:\n11:    true, false, And, Or, Not, ITE, Min, Max, floor, diff, IndexedBase, Sum,\n905:def test_Indexed():\n910:    a = IndexedBase('a')"
+    },
+    {
+        "step": 73,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/utilities/tests/test_lambdify.py  --view_range 905 950",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/utilities/tests/test_lambdify.py:\n   905\tdef test_Indexed():\n   906\t    # Issue #10934\n   907\t    if not numpy:\n   908\t        skip(\"numpy not installed\")\n   909\t\n   910\t    a = IndexedBase('a')\n   911\t    i, j = symbols('i j')\n   912\t    b = numpy.array([[1, 2], [3, 4]])\n   913\t    assert lambdify(a, Sum(a[x, y], (x, 0, 1), (y, 0, 1)))(b) == 10\n   914\t\n   915\t\n   916\tdef test_issue_12173():\n   917\t    #test for issue 12173\n   918\t    exp1 = lambdify((x, y), uppergamma(x, y),\"mpmath\")(1, 2)\n   919\t    exp2 = lambdify((x, y), lowergamma(x, y),\"mpmath\")(1, 2)\n   920\t    assert exp1 == uppergamma(1, 2).evalf()\n   921\t    assert exp2 == lowergamma(1, 2).evalf()\n   922\t\n   923\t\n   924\tdef test_issue_13642():\n   925\t    if not numpy:\n   926\t        skip(\"numpy not installed\")\n   927\t    f = lambdify(x, sinc(x))\n   928\t    assert Abs(f(1) - sinc(1)).n() < 1e-15\n   929\t\n   930\t\n   931\tdef test_sinc_mpmath():\n   932\t    f = lambdify(x, sinc(x), \"mpmath\")\n   933\t    assert Abs(f(1) - sinc(1)).n() < 1e-15\n   934\t\n   935\t\n   936\tdef test_lambdify_dummy_arg():\n   937\t    d1 = Dummy()\n   938\t    f1 = lambdify(d1, d1 + 1, dummify=False)\n   939\t    assert f1(2) == 3\n   940\t    f1b = lambdify(d1, d1 + 1)\n   941\t    assert f1b(2) == 3\n   942\t    d2 = Dummy('x')\n   943\t    f2 = lambdify(d2, d2 + 1)\n   944\t    assert f2(2) == 3\n   945\t    f3 = lambdify([[d2]], d2 + 1)\n   946\t    assert f3([2]) == 3\n   947\t\n   948\t\n   949\tdef test_lambdify_mixed_symbol_dummy_args():\n   950\t    d = Dummy()"
+    },
+    {
+        "step": 74,
+        "thought": "Let me run the lambdify tests to see if they pass:",
+        "action": "cd /testbed && python -c \"\nimport sys\nsys.path.insert(0, '.')\ntry:\n    from sympy.utilities.tests.test_lambdify import test_Indexed\n    print('Running test_Indexed...')\n    test_Indexed()\n    print('test_Indexed passed')\nexcept Exception as e:\n    print(f'test_Indexed failed: {e}')\n    import traceback\n    traceback.print_exc()\n\"",
+        "observation": "OBSERVATION:\nRunning test_Indexed...\ntest_Indexed failed: numpy not installed\nTraceback (most recent call last):\n  File \"<string>\", line 7, in <module>\n  File \"/testbed/./sympy/utilities/tests/test_lambdify.py\", line 908, in test_Indexed\n    skip(\"numpy not installed\")\n  File \"/testbed/./sympy/utilities/pytest.py\", line 138, in skip\n    raise Skipped(str)\nsympy.utilities.pytest.Skipped: numpy not installed"
+    },
+    {
+        "step": 75,
+        "thought": "The test requires numpy which isn't installed. That's OK. Let me check if there are any other tests that might test pycode with Indexed:",
+        "action": "cd /testbed && find . -type f -name \"*.py\" -path \"*/tests/*\" -exec grep -l \"pycode.*Indexed\\|Indexed.*pycode\" {} \\;",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 76,
+        "thought": "Good, no tests specifically for pycode with Indexed. Now let me think about edge cases:\n\n1. What if `expr.base` is not an IndexedBase? (e.g., if it's an NDimArray, Iterable, Tuple, MatrixBase)\n2. What if `expr.base.label` is not a Symbol? (e.g., if IndexedBase was created with a string)\n\nActually, looking at the Indexed class code again, if base is an NDimArray, Iterable, Tuple, or MatrixBase and all indices are numbers, it returns `base[args[0]]` or `base[args]` directly (line 153-157), not an Indexed object. So `expr.base` should be an IndexedBase in an Indexed object.\n\nAnd `expr.base.label` should be a Symbol because IndexedBase stores its label as a Symbol. Let me verify:",
+        "action": "str_replace_editor create /testbed/test_indexed_base.py --file_text 'from sympy import *\nfrom sympy.tensor.indexed import IndexedBase\n\n# Create IndexedBase with string\np1 = IndexedBase(\"p\")\nprint(\"p1.label:\", p1.label)\nprint(\"type(p1.label):\", type(p1.label))\n\n# Create IndexedBase with Symbol\nx = Symbol(\"x\")\np2 = IndexedBase(x)\nprint(\"\\np2.label:\", p2.label)\nprint(\"type(p2.label):\", type(p2.label))\nprint(\"p2.label == x:\", p2.label == x)\n\n# Check IndexedBase.__init__ source\nimport inspect\nprint(\"\\nIndexedBase source:\")\nprint(inspect.getsource(IndexedBase.__init__))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_indexed_base.py"
+    },
+    {
+        "step": 77,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed_base.py 2>&1 | grep -v \"SyntaxWarning\" | head -50",
+        "observation": "OBSERVATION:\np1.label: p\ntype(p1.label): <class 'sympy.core.symbol.Symbol'>\n\np2.label: x\ntype(p2.label): <class 'sympy.core.symbol.Symbol'>\np2.label == x: True\n\nIndexedBase source:\nTraceback (most recent call last):\n  File \"/testbed/test_indexed_base.py\", line 19, in <module>\n    print(inspect.getsource(IndexedBase.__init__))\n  File \"/opt/miniconda3/envs/testbed/lib/python3.9/inspect.py\", line 1024, in getsource\n    lines, lnum = getsourcelines(object)\n  File \"/opt/miniconda3/envs/testbed/lib/python3.9/inspect.py\", line 1006, in getsourcelines\n    lines, lnum = findsource(object)\n  File \"/opt/miniconda3/envs/testbed/lib/python3.9/inspect.py\", line 817, in findsource\n    file = getsourcefile(object)\n  File \"/opt/miniconda3/envs/testbed/lib/python3.9/inspect.py\", line 697, in getsourcefile\n    filename = getfile(object)\n  File \"/opt/miniconda3/envs/testbed/lib/python3.9/inspect.py\", line 677, in getfile\n    raise TypeError('module, class, method, function, traceback, frame, or '\nTypeError: module, class, method, function, traceback, frame, or code object was expected, got wrapper_descriptor"
+    },
+    {
+        "step": 78,
+        "thought": "Good, so `expr.base.label` is always a Symbol. Our implementation should work.\n\nActually, wait. I just realized something. The PR description says:\n```\ndef _print_Indexed(self, expr):\n    base, *index = expr.args\n    return \"{}[{}]\".format(str(base), \", \".join([self._print(ind) for ind in index]))\n```\n\nBut I implemented:\n```python\ndef _print_Indexed(self, expr):\n    inds = [self._print(i) for i in expr.indices]\n    return \"%s[%s]\" % (self._print(expr.base.label), \", \".join(inds))\n```\n\nThe difference is `str(base)` vs `self._print(expr.base.label)`. Actually, `str(base)` would give `\"p\"` (the string representation of the IndexedBase), while `self._print(expr.base.label)` gives the properly formatted symbol (e.g., `if_` for reserved word `if`). So our implementation is better.\n\nBut wait, what if someone creates an IndexedBase with a complex expression as label? Actually, IndexedBase takes a Symbol or string, not an expression. So `expr.base.label` should always be a Symbol.\n\nActually, let me check if IndexedBase can take an expression:",
+        "action": "str_replace_editor create /testbed/test_indexed_base2.py --file_text 'from sympy import *\n\n# Try to create IndexedBase with expression\ntry:\n    p = IndexedBase(x + y)\n    print(\"Created IndexedBase with expression x+y:\", p)\nexcept Exception as e:\n    print(\"Error creating IndexedBase with expression:\", e)\n\n# Check IndexedBase signature\nfrom sympy.tensor.indexed import IndexedBase\nimport inspect\nsig = inspect.signature(IndexedBase.__init__)\nprint(\"\\nIndexedBase.__init__ signature:\", sig)'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_indexed_base2.py"
+    },
+    {
+        "step": 79,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed_base2.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nError creating IndexedBase with expression: name 'x' is not defined\n\nIndexedBase.__init__ signature: (self, /, *args, **kwargs)"
+    },
+    {
+        "step": 80,
+        "thought": "Let me fix the test:",
+        "action": "str_replace_editor str_replace /testbed/test_indexed_base2.py   --old_str 'from sympy import *\n\n# Try to create IndexedBase with expression\ntry:\n    p = IndexedBase(x + y)\n    print(\"Created IndexedBase with expression x+y:\", p)\nexcept Exception as e:\n    print(\"Error creating IndexedBase with expression:\", e)\n\n# Check IndexedBase signature\nfrom sympy.tensor.indexed import IndexedBase\nimport inspect\nsig = inspect.signature(IndexedBase.__init__)\nprint(\"\\nIndexedBase.__init__ signature:\", sig)' --new_str 'from sympy import *\n\nx, y = symbols('\"'\"'x y'\"'\"')\n\n# Try to create IndexedBase with expression\ntry:\n    p = IndexedBase(x + y)\n    print(\"Created IndexedBase with expression x+y:\", p)\nexcept Exception as e:\n    print(\"Error creating IndexedBase with expression:\", e)\n\n# Check IndexedBase signature\nfrom sympy.tensor.indexed import IndexedBase\nimport inspect\nsig = inspect.signature(IndexedBase.__init__)\nprint(\"\\nIndexedBase.__init__ signature:\", sig)'",
+        "observation": "OBSERVATION:\nThe file /testbed/test_indexed_base2.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test_indexed_base2.py:\n     1\tfrom sympy import *\n     2\t\n     3\tx, y = symbols('x y')\n     4\t\n     5\t# Try to create IndexedBase with expression\n     6\ttry:\n     7\t    p = IndexedBase(x + y)\n     8\t    print(\"Created IndexedBase with expression x+y:\", p)\n     9\texcept Exception as e:\n    10\t    print(\"Error creating IndexedBase with expression:\", e)\n    11\t\n    12\t# Check IndexedBase signature\n    13\tfrom sympy.tensor.indexed import IndexedBase\n    14\timport inspect\n    15\tsig = inspect.signature(IndexedBase.__init__)\n    16\tprint(\"\\nIndexedBase.__init__ signature:\", sig)\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 81,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed_base2.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nCreated IndexedBase with expression x+y: x + y\n\nIndexedBase.__init__ signature: (self, /, *args, **kwargs)"
+    },
+    {
+        "step": 82,
+        "thought": "Interesting! So IndexedBase can take an expression like `x + y`. Let me check what `label` is in that case:",
+        "action": "str_replace_editor create /testbed/test_indexed_base3.py --file_text 'from sympy import *\n\nx, y = symbols('\"'\"'x y'\"'\"')\n\n# Create IndexedBase with expression\np = IndexedBase(x + y)\nprint(\"p:\", p)\nprint(\"p.label:\", p.label)\nprint(\"type(p.label):\", type(p.label))\n\n# Create Indexed from it\nidx = p[0]\nprint(\"\\nidx:\", idx)\nprint(\"idx.base:\", idx.base)\nprint(\"idx.base.label:\", idx.base.label)\nprint(\"type(idx.base.label):\", type(idx.base.label))\n\n# Try to print it with pycode\nfrom sympy.printing.pycode import pycode\nprint(\"\\npycode(idx):\", pycode(idx))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_indexed_base3.py"
+    },
+    {
+        "step": 83,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed_base3.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\np: x + y\np.label: x + y\ntype(p.label): <class 'sympy.core.add.Add'>\n\nidx: x + y[0]\nidx.base: x + y\nidx.base.label: x + y\ntype(idx.base.label): <class 'sympy.core.add.Add'>\n\npycode(idx): x + y[0]"
+    },
+    {
+        "step": 84,
+        "thought": "Oh! So `expr.base.label` can be an expression (Add) not just a Symbol! And our implementation prints it as `x + y[0]` which is wrong! It should be `(x + y)[0]`. Actually, `x + y[0]` means `x + (y[0])` in Python, not `(x + y)[0]`.\n\nSo we need to parenthesize `expr.base.label` if it's not a simple symbol. Actually, we should use `self._print(expr.base)` not `self._print(expr.base.label)`. But `expr.base` is an IndexedBase which isn't supported. Hmm.\n\nActually, we should check how other printers handle this. Let me check rcode:",
+        "action": "str_replace_editor create /testbed/test_rcode_indexed_expr.py --file_text 'from sympy import *\nfrom sympy.printing.rcode import rcode\n\nx, y = symbols('\"'\"'x y'\"'\"')\n\n# Create IndexedBase with expression\np = IndexedBase(x + y)\nidx = p[0]\nprint(\"idx:\", idx)\nprint(\"rcode(idx):\", rcode(idx))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_rcode_indexed_expr.py"
+    },
+    {
+        "step": 85,
+        "thought": "",
+        "action": "cd /testbed && python test_rcode_indexed_expr.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nidx: x + y[0]\nrcode(idx): x + y[0]"
+    },
+    {
+        "step": 86,
+        "thought": "So rcode also prints `x + y[0]` which is wrong! That's a bug in rcode too! Actually, wait. Maybe IndexedBase with an expression as label doesn't make sense and shouldn't be allowed? Let me check if this is a valid use case. Actually, `x + y[0]` where `y` is an IndexedBase would mean `x + (y[0])`. But here `x + y` is the IndexedBase, so `(x + y)[0]` would mean something else.\n\nActually, I think IndexedBase with an expression as label is weird. But we should still handle it correctly. We need to parenthesize the base if it's not a simple symbol. Let me check what `self._print(expr.base.label)` gives for `x + y`:",
+        "action": "str_replace_editor create /testbed/test_parenthesize.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import PythonCodePrinter\n\nx, y = symbols('\"'\"'x y'\"'\"')\nexpr = x + y\nprinter = PythonCodePrinter()\n\nprint(\"expr:\", expr)\nprint(\"printer.doprint(expr):\", printer.doprint(expr))\nprint(\"printer.parenthesize(expr, precedence(expr)):\", printer.parenthesize(expr, precedence(expr)))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_parenthesize.py"
+    },
+    {
+        "step": 87,
+        "thought": "",
+        "action": "cd /testbed && python test_parenthesize.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nexpr: x + y\nprinter.doprint(expr): x + y\nTraceback (most recent call last):\n  File \"/testbed/test_parenthesize.py\", line 10, in <module>\n    print(\"printer.parenthesize(expr, precedence(expr)):\", printer.parenthesize(expr, precedence(expr)))\nNameError: name 'precedence' is not defined"
+    },
+    {
+        "step": 88,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/test_parenthesize.py   --old_str 'from sympy import *\nfrom sympy.printing.pycode import PythonCodePrinter\n\nx, y = symbols('\"'\"'x y'\"'\"')\nexpr = x + y\nprinter = PythonCodePrinter()\n\nprint(\"expr:\", expr)\nprint(\"printer.doprint(expr):\", printer.doprint(expr))\nprint(\"printer.parenthesize(expr, precedence(expr)):\", printer.parenthesize(expr, precedence(expr)))' --new_str 'from sympy import *\nfrom sympy.printing.pycode import PythonCodePrinter\nfrom sympy.printing.precedence import precedence\n\nx, y = symbols('\"'\"'x y'\"'\"')\nexpr = x + y\nprinter = PythonCodePrinter()\n\nprint(\"expr:\", expr)\nprint(\"printer.doprint(expr):\", printer.doprint(expr))\nprint(\"printer.parenthesize(expr, precedence(expr)):\", printer.parenthesize(expr, precedence(expr)))'",
+        "observation": "OBSERVATION:\nThe file /testbed/test_parenthesize.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test_parenthesize.py:\n     1\tfrom sympy import *\n     2\tfrom sympy.printing.pycode import PythonCodePrinter\n     3\tfrom sympy.printing.precedence import precedence\n     4\t\n     5\tx, y = symbols('x y')\n     6\texpr = x + y\n     7\tprinter = PythonCodePrinter()\n     8\t\n     9\tprint(\"expr:\", expr)\n    10\tprint(\"printer.doprint(expr):\", printer.doprint(expr))\n    11\tprint(\"printer.parenthesize(expr, precedence(expr)):\", printer.parenthesize(expr, precedence(expr)))\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 89,
+        "thought": "",
+        "action": "cd /testbed && python test_parenthesize.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nexpr: x + y\nprinter.doprint(expr): x + y\nprinter.parenthesize(expr, precedence(expr)): (x + y)"
+    },
+    {
+        "step": 90,
+        "thought": "Good! So `parenthesize` adds parentheses. We should use `parenthesize` for the base. Actually, we need to check the precedence of the indexing operation. What's the precedence of `[]` in Python? It's very high. So we should parenthesize the base if its precedence is less than the precedence of indexing.\n\nActually, looking at other printers like ccode, they handle this. Let me check ccode:",
+        "action": "grep -n \"def _print_Indexed\" /testbed/sympy/printing/ccode.py -A 20",
+        "observation": "OBSERVATION:\n303:    def _print_Indexed(self, expr):\n304-        # calculate index for 1d array\n305-        offset = getattr(expr.base, 'offset', S.Zero)\n306-        strides = getattr(expr.base, 'strides', None)\n307-        indices = expr.indices\n308-\n309-        if strides is None or isinstance(strides, string_types):\n310-            dims = expr.shape\n311-            shift = S.One\n312-            temp = tuple()\n313-            if strides == 'C' or strides is None:\n314-                traversal = reversed(range(expr.rank))\n315-                indices = indices[::-1]\n316-            elif strides == 'F':\n317-                traversal = range(expr.rank)\n318-\n319-            for i in traversal:\n320-                temp += (shift,)\n321-                shift *= dims[i]\n322-            strides = temp\n323-        flat_index = sum([x[0]*x[1] for x in zip(indices, strides)]) + offset"
+    },
+    {
+        "step": 91,
+        "thought": "Ccode flattens multi-dimensional indices. That's different. Let me check how it prints the base:",
+        "action": "grep -n \"def _print_Indexed\" /testbed/sympy/printing/ccode.py -A 30 | tail -20",
+        "observation": "OBSERVATION:\n314-                traversal = reversed(range(expr.rank))\n315-                indices = indices[::-1]\n316-            elif strides == 'F':\n317-                traversal = range(expr.rank)\n318-\n319-            for i in traversal:\n320-                temp += (shift,)\n321-                shift *= dims[i]\n322-            strides = temp\n323-        flat_index = sum([x[0]*x[1] for x in zip(indices, strides)]) + offset\n324-        return \"%s[%s]\" % (self._print(expr.base.label),\n325-                           self._print(flat_index))\n326-\n327-    def _print_Idx(self, expr):\n328-        return self._print(expr.label)\n329-\n330-    @_as_macro_if_defined\n331-    def _print_NumberSymbol(self, expr):\n332-        return super(C89CodePrinter, self)._print_NumberSymbol(expr)\n333-"
+    },
+    {
+        "step": 92,
+        "thought": "Ccode also uses `self._print(expr.base.label)` without parenthesizing. So maybe we don't need to parenthesize? Actually, `x + y[0]` in C would also mean `x + (y[0])` not `(x + y)[0]`. So ccode has the same bug!\n\nActually, I think the issue is that IndexedBase with an expression as label is not a valid use case. But we should still handle it correctly. Let me check what happens if we try to use `expr.base` directly (the IndexedBase object):",
+        "action": "str_replace_editor create /testbed/test_print_base.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import PythonCodePrinter\n\nx, y = symbols('\"'\"'x y'\"'\"')\n\n# Create IndexedBase with expression\np = IndexedBase(x + y)\nidx = p[0]\nprinter = PythonCodePrinter()\n\nprint(\"idx.base:\", idx.base)\nprint(\"type(idx.base):\", type(idx.base))\nprint(\"str(idx.base):\", str(idx.base))\nprint(\"repr(idx.base):\", repr(idx.base))\n\n# What if we add _print_IndexedBase?\nclass TestPrinter(PythonCodePrinter):\n    def _print_IndexedBase(self, expr):\n        return self._print(expr.label)\n\ntest_printer = TestPrinter()\nprint(\"\\nWith _print_IndexedBase:\")\nprint(\"test_printer.doprint(idx.base):\", test_printer.doprint(idx.base))\nprint(\"test_printer.doprint(idx):\", test_printer.doprint(idx))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_print_base.py"
+    },
+    {
+        "step": 93,
+        "thought": "",
+        "action": "cd /testbed && python test_print_base.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nidx.base: x + y\ntype(idx.base): <class 'sympy.tensor.indexed.IndexedBase'>\nstr(idx.base): x + y\nrepr(idx.base): x + y\n\nWith _print_IndexedBase:\ntest_printer.doprint(idx.base): x + y\ntest_printer.doprint(idx): x + y[0]"
+    },
+    {
+        "step": 94,
+        "thought": "So even with `_print_IndexedBase`, we get `x + y[0]` which is wrong. We need to parenthesize. Actually, we should use `self.parenthesize(self._print(expr.base.label), precedence(expr))` or something. But actually, we should check if `expr.base.label` needs parentheses based on the precedence of the indexing operation.\n\nActually, I think the right fix is to use `self._print(expr.base)` and add `_print_IndexedBase` that returns `self._print(expr.label)` (which will parenthesize if needed). But actually, `self._print(expr.label)` for `x + y` gives `x + y` without parentheses. We need to check if it needs parentheses when used as a base for indexing.\n\nLet me check what precedence indexing has:",
+        "action": "cd /testbed && python -c \"from sympy.printing.precedence import precedence; from sympy import IndexedBase, symbols; x, y = symbols('x y'); p = IndexedBase(x + y); idx = p[0]; print('precedence(idx):', precedence(idx))\"",
+        "observation": "OBSERVATION:\nprecedence(idx): 1000"
+    },
+    {
+        "step": 95,
+        "thought": "",
+        "action": "cd /testbed && python -c \"from sympy.printing.precedence import precedence; from sympy import Add, symbols; x, y = symbols('x y'); expr = x + y; print('precedence(Add):', precedence(expr))\"",
+        "observation": "OBSERVATION:\nprecedence(Add): 40"
+    },
+    {
+        "step": 96,
+        "thought": "So indexing has precedence 1000 (very high), Add has precedence 40. So `x + y` needs parentheses when used as a base for indexing. We should use `self.parenthesize(self._print(expr.base.label), precedence(expr))` where `precedence(expr)` is the precedence of the Indexed object (which is 1000).\n\nActually, let me check how `parenthesize` works:",
+        "action": "cd /testbed && python -c \"\nfrom sympy import symbols\nfrom sympy.printing.pycode import PythonCodePrinter\nfrom sympy.printing.precedence import precedence\n\nx, y = symbols('x y')\nexpr = x + y\nprinter = PythonCodePrinter()\n\nprint('precedence(expr):', precedence(expr))\nprint('precedence of indexing (should be high):', precedence(1000))  # Not right\nprint('printer.parenthesize(expr, 1000):', printer.parenthesize(expr, 1000))\nprint('printer.parenthesize(expr, 10):', printer.parenthesize(expr, 10))\n\"",
+        "observation": "OBSERVATION:\nprecedence(expr): 40\nprecedence of indexing (should be high): 1000\nprinter.parenthesize(expr, 1000): (x + y)\nprinter.parenthesize(expr, 10): x + y"
+    },
+    {
+        "step": 97,
+        "thought": "Good! So `parenthesize(expr, 1000)` adds parentheses because 40 < 1000. So we should use `self.parenthesize(self._print(expr.base.label), PREC)` where `PREC` is the precedence of the indexing operation. What should `PREC` be? Let me check what precedence Indexed has:",
+        "action": "cd /testbed && python -c \"\nfrom sympy import IndexedBase, symbols\nfrom sympy.printing.precedence import precedence_traditional\n\nx, y = symbols('x y')\np = IndexedBase(x + y)\nidx = p[0]\n\nprint('precedence_traditional(idx):', precedence_traditional(idx))\n\"",
+        "observation": "OBSERVATION:\nprecedence_traditional(idx): 1000"
+    },
+    {
+        "step": 98,
+        "thought": "Good! So Indexed has precedence 1000. So we should use `self.parenthesize(self._print(expr.base.label), precedence_traditional(expr))`. Actually, we should use `precedence(expr)` which imports the right precedence function.\n\nLet me update our implementation:",
+        "action": "str_replace_editor str_replace /testbed/sympy/printing/pycode.py   --old_str '    def _print_Indexed(self, expr):\n        inds = [self._print(i) for i in expr.indices]\n        return \"%s[%s]\" % (self._print(expr.base.label), \", \".join(inds))' --new_str '    def _print_Indexed(self, expr):\n        from .precedence import precedence\n        inds = [self._print(i) for i in expr.indices]\n        return \"%s[%s]\" % (self.parenthesize(self._print(expr.base.label), precedence(expr)), \", \".join(inds))'",
+        "observation": "OBSERVATION:\nThe file /testbed/sympy/printing/pycode.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/sympy/printing/pycode.py:\n   355\t\n   356\t    def _print_Not(self, expr):\n   357\t        PREC = precedence(expr)\n   358\t        return self._operators['not'] + self.parenthesize(expr.args[0], PREC)\n   359\t\n   360\t    def _print_Indexed(self, expr):\n   361\t        from .precedence import precedence\n   362\t        inds = [self._print(i) for i in expr.indices]\n   363\t        return \"%s[%s]\" % (self.parenthesize(self._print(expr.base.label), precedence(expr)), \", \".join(inds))\n   364\t\n   365\t\n   366\tfor k in PythonCodePrinter._kf:\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 99,
+        "thought": "Now let me test this:",
+        "action": "cd /testbed && python test_indexed_base3.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\np: x + y\np.label: x + y\ntype(p.label): <class 'sympy.core.add.Add'>\n\nidx: x + y[0]\nidx.base: x + y\nidx.base.label: x + y\ntype(idx.base.label): <class 'sympy.core.add.Add'>\n\npycode(idx): (x + y)[0]"
+    },
+    {
+        "step": 100,
+        "thought": "Excellent! Now it prints `(x + y)[0]` which is correct! Let me run all our tests again:",
+        "action": "cd /testbed && python reproduce_issue.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nTesting pycode with Indexed:\n(p)[0]\n\nTesting pycode with Indexed with multiple indices:\n(p)[0, 1, 2]"
+    },
+    {
+        "step": 101,
+        "thought": "Hmm, now it prints `(p)[0]` instead of `p[0]`. That's unnecessary parentheses. The issue is that `p` is a Symbol, and `precedence(p)` is probably high (for atoms). Actually, `precedence(p)` for a Symbol is probably `PRECEDENCE['Atom']` which should be higher than indexing? Let me check:",
+        "action": "cd /testbed && python -c \"\nfrom sympy import IndexedBase, symbols\nfrom sympy.printing.precedence import precedence\n\np = IndexedBase('p')\nidx = p[0]\nprint('precedence(p):', precedence(p))\nprint('precedence(idx):', precedence(idx))\nprint('precedence(p.label):', precedence(p.label))\n\"",
+        "observation": "OBSERVATION:\nprecedence(p): 1000\nprecedence(idx): 1000\nprecedence(p.label): 1000"
+    },
+    {
+        "step": 102,
+        "thought": "Ah! `precedence(p)` where `p` is an IndexedBase returns 1000 (same as Indexed). And `precedence(p.label)` where `p.label` is a Symbol also returns 1000. So `parenthesize(p.label, precedence(idx))` where both are 1000 doesn't add parentheses because 1000 is not less than 1000. But we're getting parentheses. Let me check:",
+        "action": "str_replace_editor create /testbed/test_precedence_debug.py --file_text 'from sympy import IndexedBase, symbols\nfrom sympy.printing.precedence import precedence\nfrom sympy.printing.pycode import PythonCodePrinter\n\np = IndexedBase('\"'\"'p'\"'\"')\nidx = p[0]\nprinter = PythonCodePrinter()\n\nprint('\"'\"'precedence(p):'\"'\"', precedence(p))\nprint('\"'\"'precedence(idx):'\"'\"', precedence(idx))\nprint('\"'\"'precedence(p.label):'\"'\"', precedence(p.label))\nprint('\"'\"'printer.parenthesize(p.label, precedence(idx)):'\"'\"', printer.parenthesize(printer._print(p.label), precedence(idx)))\nprint('\"'\"'printer._print(p.label):'\"'\"', printer._print(p.label))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_precedence_debug.py"
+    },
+    {
+        "step": 103,
+        "thought": "",
+        "action": "cd /testbed && python test_precedence_debug.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nprecedence(p): 1000\nprecedence(idx): 1000\nprecedence(p.label): 1000\nprinter.parenthesize(p.label, precedence(idx)): (p)\nprinter._print(p.label): p"
+    },
+    {
+        "step": 104,
+        "thought": "Hmm, `parenthesize` is adding parentheses even though precedence is equal (1000 == 1000). Let me check the `parenthesize` method:",
+        "action": "cd /testbed && python -c \"\nfrom sympy.printing.pycode import PythonCodePrinter\nprinter = PythonCodePrinter()\n# Check parenthesize source\nimport inspect\nprint(inspect.getsource(printer.parenthesize))\n\"",
+        "observation": "OBSERVATION:\n    def parenthesize(self, item, level, strict=False):\n        if (precedence(item) < level) or ((not strict) and precedence(item) <= level):\n            return \"(%s)\" % self._print(item)\n        else:\n            return self._print(item)"
+    },
+    {
+        "step": 105,
+        "thought": "Ah! `parenthesize` adds parentheses if `precedence(item) <= level` when `strict=False` (default). So if precedence is equal, it adds parentheses. That's why we get `(p)[0]`. We should use `strict=True`:",
+        "action": "str_replace_editor str_replace /testbed/sympy/printing/pycode.py   --old_str '    def _print_Indexed(self, expr):\n        from .precedence import precedence\n        inds = [self._print(i) for i in expr.indices]\n        return \"%s[%s]\" % (self.parenthesize(self._print(expr.base.label), precedence(expr)), \", \".join(inds))' --new_str '    def _print_Indexed(self, expr):\n        from .precedence import precedence\n        inds = [self._print(i) for i in expr.indices]\n        return \"%s[%s]\" % (self.parenthesize(self._print(expr.base.label), precedence(expr), strict=True), \", \".join(inds))'",
+        "observation": "OBSERVATION:\nThe file /testbed/sympy/printing/pycode.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/sympy/printing/pycode.py:\n   355\t\n   356\t    def _print_Not(self, expr):\n   357\t        PREC = precedence(expr)\n   358\t        return self._operators['not'] + self.parenthesize(expr.args[0], PREC)\n   359\t\n   360\t    def _print_Indexed(self, expr):\n   361\t        from .precedence import precedence\n   362\t        inds = [self._print(i) for i in expr.indices]\n   363\t        return \"%s[%s]\" % (self.parenthesize(self._print(expr.base.label), precedence(expr), strict=True), \", \".join(inds))\n   364\t\n   365\t\n   366\tfor k in PythonCodePrinter._kf:\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 106,
+        "thought": "Now test again:",
+        "action": "cd /testbed && python reproduce_issue.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nTesting pycode with Indexed:\np[0]\n\nTesting pycode with Indexed with multiple indices:\np[0, 1, 2]"
+    },
+    {
+        "step": 107,
+        "thought": "Good! Now test the expression case:",
+        "action": "cd /testbed && python test_indexed_base3.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\np: x + y\np.label: x + y\ntype(p.label): <class 'sympy.core.add.Add'>\n\nidx: x + y[0]\nidx.base: x + y\nidx.base.label: x + y\ntype(idx.base.label): <class 'sympy.core.add.Add'>\n\npycode(idx): x + y[0]"
+    },
+    {
+        "step": 108,
+        "thought": "Hmm, now it's back to `x + y[0]` without parentheses! That's because with `strict=True`, it only adds parentheses if `precedence(item) < level`, not `<=`. Since `precedence(x + y)` is 40 and `precedence(idx)` is 1000, 40 < 1000, so it should add parentheses. But wait, we're passing `self._print(expr.base.label)` which is a string `\"x + y\"`, not the expression `x + y`. `precedence(\"x + y\")` probably returns something else. We need to pass the expression, not the printed string!\n\nActually, `parenthesize` takes `item` and calls `self._print(item)` on it. So we should pass `expr.base.label` (the expression), not `self._print(expr.base.label)` (the string):",
+        "action": "str_replace_editor str_replace /testbed/sympy/printing/pycode.py   --old_str '    def _print_Indexed(self, expr):\n        from .precedence import precedence\n        inds = [self._print(i) for i in expr.indices]\n        return \"%s[%s]\" % (self.parenthesize(self._print(expr.base.label), precedence(expr), strict=True), \", \".join(inds))' --new_str '    def _print_Indexed(self, expr):\n        from .precedence import precedence\n        inds = [self._print(i) for i in expr.indices]\n        return \"%s[%s]\" % (self.parenthesize(expr.base.label, precedence(expr), strict=True), \", \".join(inds))'",
+        "observation": "OBSERVATION:\nThe file /testbed/sympy/printing/pycode.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/sympy/printing/pycode.py:\n   355\t\n   356\t    def _print_Not(self, expr):\n   357\t        PREC = precedence(expr)\n   358\t        return self._operators['not'] + self.parenthesize(expr.args[0], PREC)\n   359\t\n   360\t    def _print_Indexed(self, expr):\n   361\t        from .precedence import precedence\n   362\t        inds = [self._print(i) for i in expr.indices]\n   363\t        return \"%s[%s]\" % (self.parenthesize(expr.base.label, precedence(expr), strict=True), \", \".join(inds))\n   364\t\n   365\t\n   366\tfor k in PythonCodePrinter._kf:\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 109,
+        "thought": "Now test:",
+        "action": "cd /testbed && python reproduce_issue.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nTesting pycode with Indexed:\np[0]\n\nTesting pycode with Indexed with multiple indices:\np[0, 1, 2]"
+    },
+    {
+        "step": 110,
+        "thought": "",
+        "action": "cd /testbed && python test_indexed_base3.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\np: x + y\np.label: x + y\ntype(p.label): <class 'sympy.core.add.Add'>\n\nidx: x + y[0]\nidx.base: x + y\nidx.base.label: x + y\ntype(idx.base.label): <class 'sympy.core.add.Add'>\n\npycode(idx): (x + y)[0]"
+    },
+    {
+        "step": 111,
+        "thought": "Perfect! Now let me run all our tests again:",
+        "action": "cd /testbed && python test_more_cases.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nTest 1 - Simple Indexed:\np[0]\np[0, 1, 2]\n\nTest 2 - Indexed with symbolic indices:\np[i]\np[i, j]\np[i, j, k]\n\nTest 3 - Indexed with expressions as indices:\np[i + 1]\np[2*i + j]\n\nTest 4 - Indexed with reserved word label:\nif_[0]\nif_[i]\n\nTest 5 - NumPyPrinter:\np[0]\np[i, j]\n\nTest 6 - MpmathPrinter:\np[0]\np[i, j]\n\nTest 7 - lambdify with python:\nTraceback (most recent call last):\n  File \"/testbed/sympy/utilities/lambdify.py\", line 124, in _import\n    namespace, namespace_default, translations, import_commands = MODULES[\nKeyError: 'python'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/testbed/test_more_cases.py\", line 45, in <module>\n    f = lambdify([p, i], p[i], \"python\")\n  File \"/testbed/sympy/utilities/lambdify.py\", line 694, in lambdify\n    buf = _get_namespace(m)\n  File \"/testbed/sympy/utilities/lambdify.py\", line 812, in _get_namespace\n    _import(m)\n  File \"/testbed/sympy/utilities/lambdify.py\", line 127, in _import\n    raise NameError(\nNameError: 'python' module can't be used for lambdification"
+    },
+    {
+        "step": 112,
+        "thought": "Good! All tests pass (except the lambdify one which is expected). Let me run the existing pycode tests again:",
+        "action": "cd /testbed && python -c \"import sys; sys.path.insert(0, '.'); from sympy.printing.tests.test_pycode import *; test_PythonCodePrinter(); print('test_PythonCodePrinter passed'); test_MpmathPrinter(); print('test_MpmathPrinter passed'); test_NumPyPrinter(); print('test_NumPyPrinter passed'); test_SciPyPrinter(); print('test_SciPyPrinter passed'); test_pycode_reserved_words(); print('test_pycode_reserved_words passed'); test_printmethod(); print('test_printmethod passed'); test_codegen_ast_nodes(); print('test_codegen_ast_nodes passed'); test_issue_14283(); print('test_issue_14283 passed'); test_NumPyPrinter_print_seq(); print('test_NumPyPrinter_print_seq passed')\"",
+        "observation": "OBSERVATION:\ntest_PythonCodePrinter passed\ntest_MpmathPrinter passed\ntest_NumPyPrinter passed\ntest_SciPyPrinter passed\ntest_pycode_reserved_words passed\ntest_printmethod passed\ntest_codegen_ast_nodes passed\ntest_issue_14283 passed\ntest_NumPyPrinter_print_seq passed"
+    },
+    {
+        "step": 113,
+        "thought": "Excellent! All tests pass. Now let me check if we should also add `_print_Indexed` to `AbstractPythonCodePrinter` instead of `PythonCodePrinter`. Actually, `PythonCodePrinter` is the base class for `NumPyPrinter` and `MpmathPrinter`, so they inherit it. That's good. But what about `SciPyPrinter`? It inherits from `NumPyPrinter`, so it also gets it. Good.\n\nActually, wait. I just realized something. The PR description shows the output as:\n```\n  # Not supported in Python:\n  # Indexed\np[0]\n```\n\nBut with our fix, it just prints `p[0]` without the warning. That's correct! The PR wants to fix the warning.\n\nNow let me think about other edge cases. What about `IndexedBase` with offset/strides? Actually, those are attributes of IndexedBase that affect how indices are calculated. But our simple implementation just prints `base[indices]`. That's probably fine for Python code. Other languages like C might need to flatten multi-dimensional indices based on strides, but Python supports multi-dimensional indexing directly.\n\nActually, wait. In Python, `p[0, 1, 2]` means indexing a 3D array. But if `p` is a 1D array with strides, we should flatten the indices. But that's probably handled at a higher level (like in lambdify when the actual array is passed). The printer just prints the syntax.\n\nActually, let me check how ccode handles strides. It flattens indices. But for Python, we don't need to flatten because Python supports multi-dimensional indexing. So our implementation is correct for Python.\n\nWhat about `Idx` objects? `expr.indices` might contain `Idx` objects. Our implementation calls `self._print(i)` for each index, which should handle `Idx` objects. Let me test:",
+        "action": "str_replace_editor create /testbed/test_idx.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import pycode\nfrom sympy.tensor import IndexedBase, Idx\n\ni, j = Idx('\"'\"'i'\"'\"'), Idx('\"'\"'j'\"'\"')\np = IndexedBase('\"'\"'p'\"'\"')\nprint(\"With Idx indices:\")\nprint(pycode(p[i]))\nprint(pycode(p[i, j]))\n\n# What does Idx print as?\nprint(\"\\nIdx('\"'\"'i'\"'\"'):\", Idx('\"'\"'i'\"'\"'))\nprint(\"pycode(Idx('\"'\"'i'\"'\"')):\", pycode(Idx('\"'\"'i'\"'\"')))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_idx.py"
+    },
+    {
+        "step": 114,
+        "thought": "",
+        "action": "cd /testbed && python test_idx.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nWith Idx indices:\n  # Not supported in Python:\n  # Idx\np[i]\n  # Not supported in Python:\n  # Idx\n  # Idx\np[i, j]\n\nIdx('i'): i\npycode(Idx('i')):   # Not supported in Python:\n  # Idx\ni"
+    },
+    {
+        "step": 115,
+        "thought": "Ah! `Idx` is not supported! So we get warnings for `Idx`. But actually, `Idx('i')` prints as `i` (the string representation). So `p[i]` prints as `p[i]` which is correct Python syntax. The warning is just because `Idx` is marked as not supported, but it still prints. That's probably fine. If we want to fix that, we need to add `_print_Idx` too. Let me check if other printers have `_print_Idx`:",
+        "action": "grep -n \"_print_Idx\" /testbed/sympy/printing/rcode.py",
+        "observation": "OBSERVATION:\n165:    def _print_Idx(self, expr):"
+    },
+    {
+        "step": 116,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/printing/rcode.py  --view_range 165 167",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/printing/rcode.py:\n   165\t    def _print_Idx(self, expr):\n   166\t        return self._print(expr.label)\n   167"
+    },
+    {
+        "step": 117,
+        "thought": "So rcode has `_print_Idx`. We should add it too for completeness. Let me add it:",
+        "action": "str_replace_editor str_replace /testbed/sympy/printing/pycode.py   --old_str '    def _print_Indexed(self, expr):\n        from .precedence import precedence\n        inds = [self._print(i) for i in expr.indices]\n        return \"%s[%s]\" % (self.parenthesize(expr.base.label, precedence(expr), strict=True), \", \".join(inds))' --new_str '    def _print_Indexed(self, expr):\n        from .precedence import precedence\n        inds = [self._print(i) for i in expr.indices]\n        return \"%s[%s]\" % (self.parenthesize(expr.base.label, precedence(expr), strict=True), \", \".join(inds))\n\n    def _print_Idx(self, expr):\n        return self._print(expr.label)'",
+        "observation": "OBSERVATION:\nThe file /testbed/sympy/printing/pycode.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/sympy/printing/pycode.py:\n   355\t\n   356\t    def _print_Not(self, expr):\n   357\t        PREC = precedence(expr)\n   358\t        return self._operators['not'] + self.parenthesize(expr.args[0], PREC)\n   359\t\n   360\t    def _print_Indexed(self, expr):\n   361\t        from .precedence import precedence\n   362\t        inds = [self._print(i) for i in expr.indices]\n   363\t        return \"%s[%s]\" % (self.parenthesize(expr.base.label, precedence(expr), strict=True), \", \".join(inds))\n   364\t\n   365\t    def _print_Idx(self, expr):\n   366\t        return self._print(expr.label)\n   367\t\n   368\t\n   369\tfor k in PythonCodePrinter._kf:\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 118,
+        "thought": "Now test:",
+        "action": "cd /testbed && python test_idx.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nWith Idx indices:\np[i]\np[i, j]\n\nIdx('i'): i\npycode(Idx('i')): i"
+    },
+    {
+        "step": 119,
+        "thought": "Great! No warnings for `Idx` now. Let me run all tests again:",
+        "action": "cd /testbed && python -c \"import sys; sys.path.insert(0, '.'); from sympy.printing.tests.test_pycode import *; test_PythonCodePrinter(); print('test_PythonCodePrinter passed'); test_MpmathPrinter(); print('test_MpmathPrinter passed'); test_NumPyPrinter(); print('test_NumPyPrinter passed'); test_SciPyPrinter(); print('test_SciPyPrinter passed'); test_pycode_reserved_words(); print('test_pycode_reserved_words passed'); test_printmethod(); print('test_printmethod passed'); test_codegen_ast_nodes(); print('test_codegen_ast_nodes passed'); test_issue_14283(); print('test_issue_14283 passed'); test_NumPyPrinter_print_seq(); print('test_NumPyPrinter_print_seq passed')\"",
+        "observation": "OBSERVATION:\ntest_PythonCodePrinter passed\ntest_MpmathPrinter passed\ntest_NumPyPrinter passed\ntest_SciPyPrinter passed\ntest_pycode_reserved_words passed\ntest_printmethod passed\ntest_codegen_ast_nodes passed\ntest_issue_14283 passed\ntest_NumPyPrinter_print_seq passed"
+    },
+    {
+        "step": 120,
+        "thought": "Perfect! All tests pass. Let me also run a broader set of tests to make sure we didn't break anything:",
+        "action": "cd /testbed && python -c \"\nimport sys\nsys.path.insert(0, '.')\n# Run some basic tests\nfrom sympy import *\nfrom sympy.printing.pycode import pycode\n\n# Test from PR description\np = IndexedBase('p')\nprint('Test from PR description:')\nprint(pycode(p[0]))\nprint()\n\n# Test more complex cases\ni, j, k = symbols('i j k')\nprint('Test with symbolic indices:')\nprint(pycode(p[i]))\nprint(pycode(p[i, j]))\nprint(pycode(p[i, j, k]))\nprint()\n\n# Test with expressions\nprint('Test with expression indices:')\nprint(pycode(p[i+1]))\nprint(pycode(p[2*i + j]))\nprint()\n\n# Test with reserved words\nif_sym = symbols('if')\nq = IndexedBase(if_sym)\nprint('Test with reserved word:')\nprint(pycode(q[0]))\nprint()\n\n# Test complex expression\nprint('Test complex expression:')\nexpr = p[i] + p[j] * p[k]\nprint(pycode(expr))\n\"",
+        "observation": "OBSERVATION:\nTest from PR description:\np[0]\n\nTest with symbolic indices:\np[i]\np[i, j]\np[i, j, k]\n\nTest with expression indices:\np[i + 1]\np[2*i + j]\n\nTest with reserved word:\nif_[0]\n\nTest complex expression:\np[i] + p[j]*p[k]"
+    },
+    {
+        "step": 121,
+        "thought": "Excellent! Everything works correctly. Let me also check if we need to handle `IndexedBase` directly (when someone tries to print an IndexedBase, not an Indexed). Actually, that would show \"Not supported\" which is probably fine. But let me add `_print_IndexedBase` for completeness:",
+        "action": "str_replace_editor str_replace /testbed/sympy/printing/pycode.py   --old_str '    def _print_Indexed(self, expr):\n        from .precedence import precedence\n        inds = [self._print(i) for i in expr.indices]\n        return \"%s[%s]\" % (self.parenthesize(expr.base.label, precedence(expr), strict=True), \", \".join(inds))\n\n    def _print_Idx(self, expr):\n        return self._print(expr.label)' --new_str '    def _print_Indexed(self, expr):\n        from .precedence import precedence\n        inds = [self._print(i) for i in expr.indices]\n        return \"%s[%s]\" % (self.parenthesize(expr.base.label, precedence(expr), strict=True), \", \".join(inds))\n\n    def _print_Idx(self, expr):\n        return self._print(expr.label)\n\n    def _print_IndexedBase(self, expr):\n        return self._print(expr.label)'",
+        "observation": "OBSERVATION:\nThe file /testbed/sympy/printing/pycode.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/sympy/printing/pycode.py:\n   355\t\n   356\t    def _print_Not(self, expr):\n   357\t        PREC = precedence(expr)\n   358\t        return self._operators['not'] + self.parenthesize(expr.args[0], PREC)\n   359\t\n   360\t    def _print_Indexed(self, expr):\n   361\t        from .precedence import precedence\n   362\t        inds = [self._print(i) for i in expr.indices]\n   363\t        return \"%s[%s]\" % (self.parenthesize(expr.base.label, precedence(expr), strict=True), \", \".join(inds))\n   364\t\n   365\t    def _print_Idx(self, expr):\n   366\t        return self._print(expr.label)\n   367\t\n   368\t    def _print_IndexedBase(self, expr):\n   369\t        return self._print(expr.label)\n   370\t\n   371\t\n   372\tfor k in PythonCodePrinter._kf:\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 122,
+        "thought": "Now test printing IndexedBase directly:",
+        "action": "str_replace_editor create /testbed/test_indexedbase.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import pycode\n\np = IndexedBase(\"p\")\nprint(\"pycode(p):\", pycode(p))\n\n# With reserved word\nif_sym = symbols(\"if\")\nq = IndexedBase(if_sym)\nprint(\"pycode(q):\", pycode(q))\n\n# With expression\nx, y = symbols('\"'\"'x y'\"'\"')\nr = IndexedBase(x + y)\nprint(\"pycode(r):\", pycode(r))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_indexedbase.py"
+    },
+    {
+        "step": 123,
+        "thought": "",
+        "action": "cd /testbed && python test_indexedbase.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\npycode(p): p\npycode(q): if_\npycode(r): x + y"
+    },
+    {
+        "step": 124,
+        "thought": "Good! Now let me run all tests one more time:",
+        "action": "cd /testbed && python -c \"import sys; sys.path.insert(0, '.'); from sympy.printing.tests.test_pycode import *; test_PythonCodePrinter(); print('test_PythonCodePrinter passed'); test_MpmathPrinter(); print('test_MpmathPrinter passed'); test_NumPyPrinter(); print('test_NumPyPrinter passed'); test_SciPyPrinter(); print('test_SciPyPrinter passed'); test_pycode_reserved_words(); print('test_pycode_reserved_words passed'); test_printmethod(); print('test_printmethod passed'); test_codegen_ast_nodes(); print('test_codegen_ast_nodes passed'); test_issue_14283(); print('test_issue_14283 passed'); test_NumPyPrinter_print_seq(); print('test_NumPyPrinter_print_seq passed')\"",
+        "observation": "OBSERVATION:\ntest_PythonCodePrinter passed\ntest_MpmathPrinter passed\ntest_NumPyPrinter passed\ntest_SciPyPrinter passed\ntest_pycode_reserved_words passed\ntest_printmethod passed\ntest_codegen_ast_nodes passed\ntest_issue_14283 passed\ntest_NumPyPrinter_print_seq passed"
+    },
+    {
+        "step": 125,
+        "thought": "Perfect! All tests pass. Let me create one more comprehensive test to make sure everything works:",
+        "action": "str_replace_editor create /testbed/final_test.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import pycode, PythonCodePrinter, NumPyPrinter, MpmathPrinter\nfrom sympy.tensor import IndexedBase, Idx\n\nprint(\"=== Final comprehensive test ===\")\n\n# Test 1: Basic Indexed from PR description\nprint(\"\\n1. Basic test from PR description:\")\np = IndexedBase(\"p\")\nprint(\"pycode(p[0]):\", pycode(p[0]))\nprint(\"Expected: p[0] (no warning)\")\n\n# Test 2: Multiple indices\nprint(\"\\n2. Multiple indices:\")\nprint(\"pycode(p[0, 1, 2]):\", pycode(p[0, 1, 2]))\n\n# Test 3: Symbolic indices\nprint(\"\\n3. Symbolic indices:\")\ni, j, k = symbols('\"'\"'i j k'\"'\"')\nprint(\"pycode(p[i]):\", pycode(p[i]))\nprint(\"pycode(p[i, j]):\", pycode(p[i, j]))\nprint(\"pycode(p[i, j, k]):\", pycode(p[i, j, k]))\n\n# Test 4: Idx objects\nprint(\"\\n4. Idx objects:\")\ni_idx, j_idx = Idx('\"'\"'i'\"'\"'), Idx('\"'\"'j'\"'\"')\nprint(\"pycode(p[i_idx]):\", pycode(p[i_idx]))\nprint(\"pycode(p[i_idx, j_idx]):\", pycode(p[i_idx, j_idx]))\n\n# Test 5: Expression indices\nprint(\"\\n5. Expression indices:\")\nprint(\"pycode(p[i+1]):\", pycode(p[i+1]))\nprint(\"pycode(p[2*i + j]):\", pycode(p[2*i + j]))\n\n# Test 6: Complex base (expression)\nprint(\"\\n6. Complex base (expression):\")\nx, y = symbols('\"'\"'x y'\"'\"')\nq = IndexedBase(x + y)\nprint(\"pycode(q[0]):\", pycode(q[0]))\nprint(\"Expected: (x + y)[0]\")\n\n# Test 7: Reserved word as label\nprint(\"\\n7. Reserved word as label:\")\nif_sym = symbols('\"'\"'if'\"'\"')\nr = IndexedBase(if_sym)\nprint(\"pycode(r[0]):\", pycode(r[0]))\nprint(\"Expected: if_[0]\")\n\n# Test 8: Complex expression with Indexed\nprint(\"\\n8. Complex expression with Indexed:\")\nexpr = p[i] + p[j] * p[k] - p[0]\nprint(\"pycode(expr):\", pycode(expr))\n\n# Test 9: Different printers\nprint(\"\\n9. Different printers inherit the method:\")\nprint(\"PythonCodePrinter().doprint(p[0]):\", PythonCodePrinter().doprint(p[0]))\nprint(\"NumPyPrinter().doprint(p[0]):\", NumPyPrinter().doprint(p[0]))\nprint(\"MpmathPrinter().doprint(p[0]):\", MpmathPrinter().doprint(p[0]))\n\n# Test 10: IndexedBase directly\nprint(\"\\n10. IndexedBase directly:\")\nprint(\"pycode(p):\", pycode(p))\nprint(\"pycode(q):\", pycode(q))\nprint(\"pycode(r):\", pycode(r))\n\nprint(\"\\n=== All tests completed ===\")'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/final_test.py"
+    },
+    {
+        "step": 126,
+        "thought": "",
+        "action": "cd /testbed && python final_test.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\n=== Final comprehensive test ===\n\n1. Basic test from PR description:\npycode(p[0]): p[0]\nExpected: p[0] (no warning)\n\n2. Multiple indices:\npycode(p[0, 1, 2]): p[0, 1, 2]\n\n3. Symbolic indices:\npycode(p[i]): p[i]\npycode(p[i, j]): p[i, j]\npycode(p[i, j, k]): p[i, j, k]\n\n4. Idx objects:\npycode(p[i_idx]): p[i]\npycode(p[i_idx, j_idx]): p[i, j]\n\n5. Expression indices:\npycode(p[i+1]): p[i + 1]\npycode(p[2*i + j]): p[2*i + j]\n\n6. Complex base (expression):\npycode(q[0]): (x + y)[0]\nExpected: (x + y)[0]\n\n7. Reserved word as label:\npycode(r[0]): if_[0]\nExpected: if_[0]\n\n8. Complex expression with Indexed:\npycode(expr): -p[0] + p[i] + p[j]*p[k]\n\n9. Different printers inherit the method:\nPythonCodePrinter().doprint(p[0]): p[0]\nNumPyPrinter().doprint(p[0]): p[0]\nMpmathPrinter().doprint(p[0]): p[0]\n\n10. IndexedBase directly:\npycode(p): p\npycode(q): x + y\npycode(r): if_\n\n=== All tests completed ==="
+    },
+    {
+        "step": 127,
+        "thought": "I'll submit the changes since I've successfully implemented the fix for the PythonCodePrinter to support Indexed as requested in the PR description.",
+        "action": "submit",
+        "observation": "OBSERVATION:\nThank you for your work on this issue. Please carefully follow the steps below to help review your changes.\n\n1. If you made any changes to your code after running the reproduction script, please run the reproduction script again.\n  If the reproduction script is failing, please revisit your changes and make sure they are correct.\n  If you have already removed your reproduction script, please ignore this step.\n2. Remove your reproduction script (if you haven't done so already).\n3. If you have modified any TEST files, please revert them to the state they had before you started fixing the issue.\n  You can do this with `git checkout -- /path/to/test/file.py`. Use below <diff> to find the files you need to revert.\n4. Run the submit command again to confirm.\n\nHere is a list of all of your changes:\n\n<diff>\ndiff --git a/final_test.py b/final_test.py\nnew file mode 100644\nindex 000000000..a84531ee1\n--- /dev/null\n+++ b/final_test.py\n@@ -0,0 +1,66 @@\n+from sympy import *\n+from sympy.printing.pycode import pycode, PythonCodePrinter, NumPyPrinter, MpmathPrinter\n+from sympy.tensor import IndexedBase, Idx\n+\n+print(\"=== Final comprehensive test ===\")\n+\n+# Test 1: Basic Indexed from PR description\n+print(\"\\n1. Basic test from PR description:\")\n+p = IndexedBase(\"p\")\n+print(\"pycode(p[0]):\", pycode(p[0]))\n+print(\"Expected: p[0] (no warning)\")\n+\n+# Test 2: Multiple indices\n+print(\"\\n2. Multiple indices:\")\n+print(\"pycode(p[0, 1, 2]):\", pycode(p[0, 1, 2]))\n+\n+# Test 3: Symbolic indices\n+print(\"\\n3. Symbolic indices:\")\n+i, j, k = symbols('i j k')\n+print(\"pycode(p[i]):\", pycode(p[i]))\n+print(\"pycode(p[i, j]):\", pycode(p[i, j]))\n+print(\"pycode(p[i, j, k]):\", pycode(p[i, j, k]))\n+\n+# Test 4: Idx objects\n+print(\"\\n4. Idx objects:\")\n+i_idx, j_idx = Idx('i'), Idx('j')\n+print(\"pycode(p[i_idx]):\", pycode(p[i_idx]))\n+print(\"pycode(p[i_idx, j_idx]):\", pycode(p[i_idx, j_idx]))\n+\n+# Test 5: Expression indices\n+print(\"\\n5. Expression indices:\")\n+print(\"pycode(p[i+1]):\", pycode(p[i+1]))\n+print(\"pycode(p[2*i + j]):\", pycode(p[2*i + j]))\n+\n+# Test 6: Complex base (expression)\n+print(\"\\n6. Complex base (expression):\")\n+x, y = symbols('x y')\n+q = IndexedBase(x + y)\n+print(\"pycode(q[0]):\", pycode(q[0]))\n+print(\"Expected: (x + y)[0]\")\n+\n+# Test 7: Reserved word as label\n+print(\"\\n7. Reserved word as label:\")\n+if_sym = symbols('if')\n+r = IndexedBase(if_sym)\n+print(\"pycode(r[0]):\", pycode(r[0]))\n+print(\"Expected: if_[0]\")\n+\n+# Test 8: Complex expression with Indexed\n+print(\"\\n8. Complex expression with Indexed:\")\n+expr = p[i] + p[j] * p[k] - p[0]\n+print(\"pycode(expr):\", pycode(expr))\n+\n+# Test 9: Different printers\n+print(\"\\n9. Different printers inherit the method:\")\n+print(\"PythonCodePrinter().doprint(p[0]):\", PythonCodePrinter().doprint(p[0]))\n+print(\"NumPyPrinter().doprint(p[0]):\", NumPyPrinter().doprint(p[0]))\n+print(\"MpmathPrinter().doprint(p[0]):\", MpmathPrinter().doprint(p[0]))\n+\n+# Test 10: IndexedBase directly\n+print(\"\\n10. IndexedBase directly:\")\n+print(\"pycode(p):\", pycode(p))\n+print(\"pycode(q):\", pycode(q))\n+print(\"pycode(r):\", pycode(r))\n+\n+print(\"\\n=== All tests completed ===\")\n\\ No newline at end of file\ndiff --git a/reproduce_issue.py b/reproduce_issue.py\nnew file mode 100644\nindex 000000000..151f89461\n--- /dev/null\n+++ b/reproduce_issue.py\n@@ -0,0 +1,8 @@\n+from sympy import *\n+from sympy.printing.pycode import pycode\n+\n+p = IndexedBase(\"p\")\n+print(\"Testing pycode with Indexed:\")\n+print(pycode(p[0]))\n+print(\"\\nTesting pycode with Indexed with multiple indices:\")\n+print(pycode(p[0, 1, 2]))\n\\ No newline at end of file\ndiff --git a/sympy/printing/pycode.py b/sympy/printing/pycode.py\nindex a3f031073..41b1bdc5c 100644\n--- a/sympy/printing/pycode.py\n+++ b/sympy/printing/pycode.py\n@@ -357,6 +357,17 @@ def _print_Not(self, expr):\n         PREC = precedence(expr)\n         return self._operators['not'] + self.parenthesize(expr.args[0], PREC)\n \n+    def _print_Indexed(self, expr):\n+        from .precedence import precedence\n+        inds = [self._print(i) for i in expr.indices]\n+        return \"%s[%s]\" % (self.parenthesize(expr.base.label, precedence(expr), strict=True), \", \".join(inds))\n+\n+    def _print_Idx(self, expr):\n+        return self._print(expr.label)\n+\n+    def _print_IndexedBase(self, expr):\n+        return self._print(expr.label)\n+\n \n for k in PythonCodePrinter._kf:\n     setattr(PythonCodePrinter, '_print_%s' % k, _print_known_func)\ndiff --git a/test_idx.py b/test_idx.py\nnew file mode 100644\nindex 000000000..f5314614d\n--- /dev/null\n+++ b/test_idx.py\n@@ -0,0 +1,13 @@\n+from sympy import *\n+from sympy.printing.pycode import pycode\n+from sympy.tensor import IndexedBase, Idx\n+\n+i, j = Idx('i'), Idx('j')\n+p = IndexedBase('p')\n+print(\"With Idx indices:\")\n+print(pycode(p[i]))\n+print(pycode(p[i, j]))\n+\n+# What does Idx print as?\n+print(\"\\nIdx('i'):\", Idx('i'))\n+print(\"pycode(Idx('i')):\", pycode(Idx('i')))\n\\ No newline at end of file\ndiff --git a/test_indexed.py b/test_indexed.py\nnew file mode 100644\nindex 000000000..61cbb1a5e\n--- /dev/null\n+++ b/test_indexed.py\n@@ -0,0 +1,10 @@\n+from sympy import *\n+p = IndexedBase(\"p\")\n+idx = p[0, 1, 2]\n+print(\"Type:\", type(idx))\n+print(\"Class name:\", idx.__class__.__name__)\n+print(\"Args:\", idx.args)\n+print(\"Base:\", idx.base)\n+print(\"Indices:\", idx.indices)\n+print(\"Shape:\", idx.shape)\n+print(\"Rank:\", idx.rank)\n\\ No newline at end of file\ndiff --git a/test_indexed2.py b/test_indexed2.py\nnew file mode 100644\nindex 000000000..477cc22c1\n--- /dev/null\n+++ b/test_indexed2.py\n@@ -0,0 +1,9 @@\n+from sympy import *\n+p = IndexedBase(\"p\")\n+idx = p[0, 1, 2]\n+print(\"Base:\", idx.base)\n+print(\"Base type:\", type(idx.base))\n+print(\"Base label:\", idx.base.label)\n+print(\"Base label type:\", type(idx.base.label))\n+print(\"Base args:\", idx.base.args)\n+print(\"Base name:\", idx.base.name)\n\\ No newline at end of file\ndiff --git a/test_indexed3.py b/test_indexed3.py\nnew file mode 100644\nindex 000000000..f061387eb\n--- /dev/null\n+++ b/test_indexed3.py\n@@ -0,0 +1,12 @@\n+from sympy import *\n+from sympy.printing.pycode import PythonCodePrinter\n+\n+p = IndexedBase(\"p\")\n+idx = p[0, 1, 2]\n+printer = PythonCodePrinter()\n+\n+print(\"expr.base:\", idx.base)\n+print(\"printer.doprint(expr.base):\", printer.doprint(idx.base))\n+print(\"expr.base.label:\", idx.base.label)\n+print(\"printer.doprint(expr.base.label):\", printer.doprint(idx.base.label))\n+print(\"str(expr.base):\", str(idx.base))\n\\ No newline at end of file\ndiff --git a/test_indexed4.py b/test_indexed4.py\nnew file mode 100644\nindex 000000000..c3dd836f4\n--- /dev/null\n+++ b/test_indexed4.py\n@@ -0,0 +1,17 @@\n+from sympy import *\n+from sympy.printing.pycode import pycode\n+\n+# Test with simple IndexedBase\n+p = IndexedBase(\"p\")\n+print(\"Simple IndexedBase:\")\n+print(pycode(p[0]))\n+print(pycode(p[0, 1, 2]))\n+\n+# Test with IndexedBase that has offset/strides?\n+# Actually, let me check if IndexedBase can have other attributes\n+print(\"\\nChecking IndexedBase attributes:\")\n+print(\"p:\", p)\n+print(\"p.label:\", p.label)\n+print(\"type(p.label):\", type(p.label))\n+print(\"p.args:\", p.args)\n+print(\"p.name:\", p.name)\n\\ No newline at end of file\ndiff --git a/test_indexed5.py b/test_indexed5.py\nnew file mode 100644\nindex 000000000..aedf19b8a\n--- /dev/null\n+++ b/test_indexed5.py\n@@ -0,0 +1,7 @@\n+from sympy import *\n+from sympy.printing.rcode import rcode\n+\n+p = IndexedBase(\"p\")\n+print(\"rcode(p):\", rcode(p))\n+print(\"rcode(p[0]):\", rcode(p[0]))\n+print(\"rcode(p[0, 1, 2]):\", rcode(p[0, 1, 2]))\n\\ No newline at end of file\ndiff --git a/test_indexed6.py b/test_indexed6.py\nnew file mode 100644\nindex 000000000..07d824e8f\n--- /dev/null\n+++ b/test_indexed6.py\n@@ -0,0 +1,20 @@\n+from sympy import *\n+from sympy.printing.pycode import PythonCodePrinter\n+\n+# Let's see what happens when we try to print an IndexedBase\n+p = IndexedBase(\"p\")\n+printer = PythonCodePrinter()\n+\n+# Check what methods are available\n+print(\"Has _print_Indexed?\", hasattr(printer, '_print_Indexed'))\n+print(\"Has _print_IndexedBase?\", hasattr(printer, '_print_IndexedBase'))\n+\n+# Try to see what str(p) gives\n+print(\"str(p):\", str(p))\n+print(\"p:\", p)\n+print(\"repr(p):\", repr(p))\n+\n+# What about p.label?\n+print(\"p.label:\", p.label)\n+print(\"type(p.label):\", type(p.label))\n+print(\"str(p.label):\", str(p.label))\n\\ No newline at end of file\ndiff --git a/test_indexed7.py b/test_indexed7.py\nnew file mode 100644\nindex 000000000..ad577e21d\n--- /dev/null\n+++ b/test_indexed7.py\n@@ -0,0 +1,18 @@\n+from sympy import *\n+from sympy.printing.pycode import PythonCodePrinter\n+\n+# Test with a symbol that might need special handling\n+x = symbols(\"x\")\n+p = IndexedBase(x)  # Use a Symbol as label, not a string\n+print(\"p:\", p)\n+print(\"p.label:\", p.label)\n+print(\"type(p.label):\", type(p.label))\n+\n+idx = p[0, 1]\n+print(\"idx:\", idx)\n+print(\"idx.base:\", idx.base)\n+print(\"idx.base.label:\", idx.base.label)\n+\n+printer = PythonCodePrinter()\n+print(\"\\nprinter.doprint(idx.base.label):\", printer.doprint(idx.base.label))\n+print(\"str(idx.base):\", str(idx.base))\n\\ No newline at end of file\ndiff --git a/test_indexed_base.py b/test_indexed_base.py\nnew file mode 100644\nindex 000000000..f321a4f87\n--- /dev/null\n+++ b/test_indexed_base.py\n@@ -0,0 +1,19 @@\n+from sympy import *\n+from sympy.tensor.indexed import IndexedBase\n+\n+# Create IndexedBase with string\n+p1 = IndexedBase(\"p\")\n+print(\"p1.label:\", p1.label)\n+print(\"type(p1.label):\", type(p1.label))\n+\n+# Create IndexedBase with Symbol\n+x = Symbol(\"x\")\n+p2 = IndexedBase(x)\n+print(\"\\np2.label:\", p2.label)\n+print(\"type(p2.label):\", type(p2.label))\n+print(\"p2.label == x:\", p2.label == x)\n+\n+# Check IndexedBase.__init__ source\n+import inspect\n+print(\"\\nIndexedBase source:\")\n+print(inspect.getsource(IndexedBase.__init__))\n\\ No newline at end of file\ndiff --git a/test_indexed_base2.py b/test_indexed_base2.py\nnew file mode 100644\nindex 000000000..36a996513\n--- /dev/null\n+++ b/test_indexed_base2.py\n@@ -0,0 +1,16 @@\n+from sympy import *\n+\n+x, y = symbols('x y')\n+\n+# Try to create IndexedBase with expression\n+try:\n+    p = IndexedBase(x + y)\n+    print(\"Created IndexedBase with expression x+y:\", p)\n+except Exception as e:\n+    print(\"Error creating IndexedBase with expression:\", e)\n+\n+# Check IndexedBase signature\n+from sympy.tensor.indexed import IndexedBase\n+import inspect\n+sig = inspect.signature(IndexedBase.__init__)\n+print(\"\\nIndexedBase.__init__ signature:\", sig)\n\\ No newline at end of file\ndiff --git a/test_indexed_base3.py b/test_indexed_base3.py\nnew file mode 100644\nindex 000000000..c35a31eb0\n--- /dev/null\n+++ b/test_indexed_base3.py\n@@ -0,0 +1,20 @@\n+from sympy import *\n+\n+x, y = symbols('x y')\n+\n+# Create IndexedBase with expression\n+p = IndexedBase(x + y)\n+print(\"p:\", p)\n+print(\"p.label:\", p.label)\n+print(\"type(p.label):\", type(p.label))\n+\n+# Create Indexed from it\n+idx = p[0]\n+print(\"\\nidx:\", idx)\n+print(\"idx.base:\", idx.base)\n+print(\"idx.base.label:\", idx.base.label)\n+print(\"type(idx.base.label):\", type(idx.base.label))\n+\n+# Try to print it with pycode\n+from sympy.printing.pycode import pycode\n+print(\"\\npycode(idx):\", pycode(idx))\n\\ No newline at end of file\ndiff --git a/test_indexedbase.py b/test_indexedbase.py\nnew file mode 100644\nindex 000000000..0effc419e\n--- /dev/null\n+++ b/test_indexedbase.py\n@@ -0,0 +1,15 @@\n+from sympy import *\n+from sympy.printing.pycode import pycode\n+\n+p = IndexedBase(\"p\")\n+print(\"pycode(p):\", pycode(p))\n+\n+# With reserved word\n+if_sym = symbols(\"if\")\n+q = IndexedBase(if_sym)\n+print(\"pycode(q):\", pycode(q))\n+\n+# With expression\n+x, y = symbols('x y')\n+r = IndexedBase(x + y)\n+print(\"pycode(r):\", pycode(r))\n\\ No newline at end of file\ndiff --git a/test_more_cases.py b/test_more_cases.py\nnew file mode 100644\nindex 000000000..d0035df70\n--- /dev/null\n+++ b/test_more_cases.py\n@@ -0,0 +1,52 @@\n+from sympy import *\n+from sympy.printing.pycode import pycode\n+\n+# Test 1: Simple Indexed\n+p = IndexedBase(\"p\")\n+print(\"Test 1 - Simple Indexed:\")\n+print(pycode(p[0]))\n+print(pycode(p[0, 1, 2]))\n+\n+# Test 2: Indexed with symbolic indices\n+i, j, k = symbols('i j k')\n+print(\"\\nTest 2 - Indexed with symbolic indices:\")\n+print(pycode(p[i]))\n+print(pycode(p[i, j]))\n+print(pycode(p[i, j, k]))\n+\n+# Test 3: Indexed with expressions as indices\n+print(\"\\nTest 3 - Indexed with expressions as indices:\")\n+print(pycode(p[i+1]))\n+print(pycode(p[2*i + j]))\n+\n+# Test 4: Indexed with reserved word as label\n+if_sym = symbols(\"if\")\n+q = IndexedBase(if_sym)\n+print(\"\\nTest 4 - Indexed with reserved word label:\")\n+print(pycode(q[0]))\n+print(pycode(q[i]))\n+\n+# Test 5: Test with NumPyPrinter\n+from sympy.printing.pycode import NumPyPrinter\n+numpy_printer = NumPyPrinter()\n+print(\"\\nTest 5 - NumPyPrinter:\")\n+print(numpy_printer.doprint(p[0]))\n+print(numpy_printer.doprint(p[i, j]))\n+\n+# Test 6: Test with MpmathPrinter\n+from sympy.printing.pycode import MpmathPrinter\n+mpmath_printer = MpmathPrinter()\n+print(\"\\nTest 6 - MpmathPrinter:\")\n+print(mpmath_printer.doprint(p[0]))\n+print(mpmath_printer.doprint(p[i, j]))\n+\n+# Test 7: Test lambdify with python\n+print(\"\\nTest 7 - lambdify with python:\")\n+f = lambdify([p, i], p[i], \"python\")\n+print(\"Function created successfully\")\n+# Can't actually call it without proper arguments, but that's OK\n+\n+# Test 8: Complex expression with Indexed\n+print(\"\\nTest 8 - Complex expression:\")\n+expr = p[i] + p[j] * p[k]\n+print(pycode(expr))\n\\ No newline at end of file\ndiff --git a/test_parenthesize.py b/test_parenthesize.py\nnew file mode 100644\nindex 000000000..d00fc9dad\n--- /dev/null\n+++ b/test_parenthesize.py\n@@ -0,0 +1,11 @@\n+from sympy import *\n+from sympy.printing.pycode import PythonCodePrinter\n+from sympy.printing.precedence import precedence\n+\n+x, y = symbols('x y')\n+expr = x + y\n+printer = PythonCodePrinter()\n+\n+print(\"expr:\", expr)\n+print(\"printer.doprint(expr):\", printer.doprint(expr))\n+print(\"printer.parenthesize(expr, precedence(expr)):\", printer.parenthesize(expr, precedence(expr)))\n\\ No newline at end of file\ndiff --git a/test_precedence_debug.py b/test_precedence_debug.py\nnew file mode 100644\nindex 000000000..7a1e86d5a\n--- /dev/null\n+++ b/test_precedence_debug.py\n@@ -0,0 +1,13 @@\n+from sympy import IndexedBase, symbols\n+from sympy.printing.precedence import precedence\n+from sympy.printing.pycode import PythonCodePrinter\n+\n+p = IndexedBase('p')\n+idx = p[0]\n+printer = PythonCodePrinter()\n+\n+print('precedence(p):', precedence(p))\n+print('precedence(idx):', precedence(idx))\n+print('precedence(p.label):', precedence(p.label))\n+print('printer.parenthesize(p.label, precedence(idx)):', printer.parenthesize(printer._print(p.label), precedence(idx)))\n+print('printer._print(p.label):', printer._print(p.label))\n\\ No newline at end of file\ndiff --git a/test_print_base.py b/test_print_base.py\nnew file mode 100644\nindex 000000000..f64abe9ad\n--- /dev/null\n+++ b/test_print_base.py\n@@ -0,0 +1,24 @@\n+from sympy import *\n+from sympy.printing.pycode import PythonCodePrinter\n+\n+x, y = symbols('x y')\n+\n+# Create IndexedBase with expression\n+p = IndexedBase(x + y)\n+idx = p[0]\n+printer = PythonCodePrinter()\n+\n+print(\"idx.base:\", idx.base)\n+print(\"type(idx.base):\", type(idx.base))\n+print(\"str(idx.base):\", str(idx.base))\n+print(\"repr(idx.base):\", repr(idx.base))\n+\n+# What if we add _print_IndexedBase?\n+class TestPrinter(PythonCodePrinter):\n+    def _print_IndexedBase(self, expr):\n+        return self._print(expr.label)\n+\n+test_printer = TestPrinter()\n+print(\"\\nWith _print_IndexedBase:\")\n+print(\"test_printer.doprint(idx.base):\", test_printer.doprint(idx.base))\n+print(\"test_printer.doprint(idx):\", test_printer.doprint(idx))\n\\ No newline at end of file\ndiff --git a/test_rcode_indexed_expr.py b/test_rcode_indexed_expr.py\nnew file mode 100644\nindex 000000000..5f98cb811\n--- /dev/null\n+++ b/test_rcode_indexed_expr.py\n@@ -0,0 +1,10 @@\n+from sympy import *\n+from sympy.printing.rcode import rcode\n+\n+x, y = symbols('x y')\n+\n+# Create IndexedBase with expression\n+p = IndexedBase(x + y)\n+idx = p[0]\n+print(\"idx:\", idx)\n+print(\"rcode(idx):\", rcode(idx))\n\\ No newline at end of file\ndiff --git a/test_reserved.py b/test_reserved.py\nnew file mode 100644\nindex 000000000..28dcf0ee8\n--- /dev/null\n+++ b/test_reserved.py\n@@ -0,0 +1,8 @@\n+from sympy import *\n+from sympy.printing.pycode import pycode\n+\n+# Test with a reserved word\n+if_sym = symbols(\"if\")\n+p = IndexedBase(if_sym)\n+print(\"IndexedBase with reserved word 'if':\")\n+print(pycode(p[0]))\n\\ No newline at end of file\ndiff --git a/test_reserved2.py b/test_reserved2.py\nnew file mode 100644\nindex 000000000..98dc5c16e\n--- /dev/null\n+++ b/test_reserved2.py\n@@ -0,0 +1,7 @@\n+from sympy import *\n+from sympy.printing.pycode import pycode\n+\n+# Test with a reserved word\n+if_sym = symbols(\"if\")\n+print(\"pycode(if_sym):\", pycode(if_sym))\n+print(\"pycode(if_sym + 1):\", pycode(if_sym + 1))\n\\ No newline at end of file\n\n</diff>"
+    },
+    {
+        "step": 128,
+        "thought": "I need to remove my test files and run the reproduction script again to confirm the fix works:",
+        "action": "cd /testbed && rm -f reproduce_issue.py test_*.py final_test.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 129,
+        "thought": "Now let me recreate the reproduction script and run it:",
+        "action": "str_replace_editor create /testbed/reproduce_issue.py --file_text 'from sympy import *\nfrom sympy.printing.pycode import pycode\n\np = IndexedBase(\"p\")\nprint(\"Testing pycode with Indexed:\")\nprint(pycode(p[0]))\nprint(\"\\nTesting pycode with Indexed with multiple indices:\")\nprint(pycode(p[0, 1, 2]))'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/reproduce_issue.py"
+    },
+    {
+        "step": 130,
+        "thought": "",
+        "action": "cd /testbed && python reproduce_issue.py 2>&1 | grep -v \"SyntaxWarning\"",
+        "observation": "OBSERVATION:\nTesting pycode with Indexed:\np[0]\n\nTesting pycode with Indexed with multiple indices:\np[0, 1, 2]"
+    },
+    {
+        "step": 131,
+        "thought": "Perfect! The fix works. Now let me remove the reproduction script and submit:",
+        "action": "cd /testbed && rm -f reproduce_issue.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 132,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\ndiff --git a/sympy/printing/pycode.py b/sympy/printing/pycode.py\nindex a3f031073..41b1bdc5c 100644\n--- a/sympy/printing/pycode.py\n+++ b/sympy/printing/pycode.py\n@@ -357,6 +357,17 @@ def _print_Not(self, expr):\n         PREC = precedence(expr)\n         return self._operators['not'] + self.parenthesize(expr.args[0], PREC)\n \n+    def _print_Indexed(self, expr):\n+        from .precedence import precedence\n+        inds = [self._print(i) for i in expr.indices]\n+        return \"%s[%s]\" % (self.parenthesize(expr.base.label, precedence(expr), strict=True), \", \".join(inds))\n+\n+    def _print_Idx(self, expr):\n+        return self._print(expr.label)\n+\n+    def _print_IndexedBase(self, expr):\n+        return self._print(expr.label)\n+\n \n for k in PythonCodePrinter._kf:\n     setattr(PythonCodePrinter, '_print_%s' % k, _print_known_func)"
+    }
+]

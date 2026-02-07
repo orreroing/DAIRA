@@ -1,0 +1,152 @@
+[
+    {
+        "step": 1,
+        "thought": "",
+        "action": "ls -F /testbed",
+        "observation": "OBSERVATION:\nAUTHORS\t\t  INSTALL\t  README.rst  js_tests/       setup.cfg\nCONTRIBUTING.rst  LICENSE\t  django/     package.json    setup.py\nDjango.egg-info/  LICENSE.python  docs/       pyproject.toml  tests/\nGruntfile.js\t  MANIFEST.in\t  extras/     scripts/\t      tox.ini"
+    },
+    {
+        "step": 2,
+        "thought": "",
+        "action": "find /testbed/django/forms -name \"*.py\" | xargs grep -l \"class MultiValueField\"",
+        "observation": "OBSERVATION:\n/testbed/django/forms/fields.py"
+    },
+    {
+        "step": 3,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/reproduce_issue.py --file_text 'from django.forms import (\n    Form,\n    CharField,\n    MultiValueField,\n    MultiWidget,\n)\nimport django\nfrom django.conf import settings\n\nif not settings.configured:\n    settings.configure()\ndjango.setup()\n\nclass MF(MultiValueField):\n    widget = MultiWidget\n    def __init__(self):\n        fields = [\n            CharField(required=False),\n            CharField(required=True),\n        ]\n        widget = self.widget(widgets=[\n            f.widget\n            for f in fields\n        ], attrs={})\n        super(MF, self).__init__(\n            fields=fields,\n            widget=widget,\n            require_all_fields=False,\n            required=False,\n        )\n    def compress(self, value):\n        return value\n\nclass F(Form):\n    mf = MF()\n\ndef test_issue():\n    # Case 1: Both subfields are empty.\n    # The reporter says f.is_valid() is True, but expected False because mf_1 is required.\n    f = F({\n        '\"'\"'mf_0'\"'\"': '\"'\"''\"'\"',\n        '\"'\"'mf_1'\"'\"': '\"'\"''\"'\"',\n    })\n    print(f\"Case 1 (empty values): is_valid = {f.is_valid()}\")\n    if f.is_valid():\n        print(\"Error: Case 1 should be invalid because mf_1 is required.\")\n    else:\n        print(\"Success: Case 1 is invalid.\")\n\n    # Case 2: One subfield is non-empty, but the required one is empty.\n    # The reporter says this correctly returns False.\n    f = F({\n        '\"'\"'mf_0'\"'\"': '\"'\"'xxx'\"'\"',\n        '\"'\"'mf_1'\"'\"': '\"'\"''\"'\"',\n    })\n    print(f\"Case 2 (one non-empty): is_valid = {f.is_valid()}\")\n    if f.is_valid():\n        print(\"Error: Case 2 should be invalid because mf_1 is required.\")\n    else:\n        print(\"Success: Case 2 is invalid.\")\n\nif __name__ == \"__main__\":\n    test_issue()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/reproduce_issue.py"
+    },
+    {
+        "step": 4,
+        "thought": "",
+        "action": "python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\nCase 1 (empty values): is_valid = True\nError: Case 1 should be invalid because mf_1 is required.\nCase 2 (one non-empty): is_valid = False\nSuccess: Case 2 is invalid."
+    },
+    {
+        "step": 5,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/django/forms/fields.py  --view_range 1012 1080",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/django/forms/fields.py:\n  1012\t        \"\"\"\n  1013\t        Validate every value in the given list. A value is validated against\n  1014\t        the corresponding Field in self.fields.\n  1015\t\n  1016\t        For example, if this MultiValueField was instantiated with\n  1017\t        fields=(DateField(), TimeField()), clean() would call\n  1018\t        DateField.clean(value[0]) and TimeField.clean(value[1]).\n  1019\t        \"\"\"\n  1020\t        clean_data = []\n  1021\t        errors = []\n  1022\t        if self.disabled and not isinstance(value, list):\n  1023\t            value = self.widget.decompress(value)\n  1024\t        if not value or isinstance(value, (list, tuple)):\n  1025\t            if not value or not [v for v in value if v not in self.empty_values]:\n  1026\t                if self.required:\n  1027\t                    raise ValidationError(self.error_messages['required'], code='required')\n  1028\t                else:\n  1029\t                    return self.compress([])\n  1030\t        else:\n  1031\t            raise ValidationError(self.error_messages['invalid'], code='invalid')\n  1032\t        for i, field in enumerate(self.fields):\n  1033\t            try:\n  1034\t                field_value = value[i]\n  1035\t            except IndexError:\n  1036\t                field_value = None\n  1037\t            if field_value in self.empty_values:\n  1038\t                if self.require_all_fields:\n  1039\t                    # Raise a 'required' error if the MultiValueField is\n  1040\t                    # required and any field is empty.\n  1041\t                    if self.required:\n  1042\t                        raise ValidationError(self.error_messages['required'], code='required')\n  1043\t                elif field.required:\n  1044\t                    # Otherwise, add an 'incomplete' error to the list of\n  1045\t                    # collected errors and skip field cleaning, if a required\n  1046\t                    # field is empty.\n  1047\t                    if field.error_messages['incomplete'] not in errors:\n  1048\t                        errors.append(field.error_messages['incomplete'])\n  1049\t                    continue\n  1050\t            try:\n  1051\t                clean_data.append(field.clean(field_value))\n  1052\t            except ValidationError as e:\n  1053\t                # Collect all validation errors in a single list, which we'll\n  1054\t                # raise at the end of clean(), rather than raising a single\n  1055\t                # exception for the first error we encounter. Skip duplicates.\n  1056\t                errors.extend(m for m in e.error_list if m not in errors)\n  1057\t        if errors:\n  1058\t            raise ValidationError(errors)\n  1059\t\n  1060\t        out = self.compress(clean_data)\n  1061\t        self.validate(out)\n  1062\t        self.run_validators(out)\n  1063\t        return out\n  1064\t\n  1065\t    def compress(self, data_list):\n  1066\t        \"\"\"\n  1067\t        Return a single value for the given list of values. The values can be\n  1068\t        assumed to be valid.\n  1069\t\n  1070\t        For example, if this MultiValueField was instantiated with\n  1071\t        fields=(DateField(), TimeField()), this might return a datetime\n  1072\t        object created by combining the date and time in data_list.\n  1073\t        \"\"\"\n  1074\t        raise NotImplementedError('Subclasses must implement this method.')\n  1075\t\n  1076\t    def has_changed(self, initial, data):\n  1077\t        if self.disabled:\n  1078\t            return False\n  1079\t        if initial is None:\n  1080\t            initial = ['' for x in range(0, len(data))]"
+    },
+    {
+        "step": 6,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/django/forms/fields.py  --view_range 970 1010",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/django/forms/fields.py:\n   970\t    Its clean() method takes a \"decompressed\" list of values, which are then\n   971\t    cleaned into a single value according to self.fields. Each value in\n   972\t    this list is cleaned by the corresponding field -- the first value is\n   973\t    cleaned by the first field, the second value is cleaned by the second\n   974\t    field, etc. Once all fields are cleaned, the list of clean values is\n   975\t    \"compressed\" into a single value.\n   976\t\n   977\t    Subclasses should not have to implement clean(). Instead, they must\n   978\t    implement compress(), which takes a list of valid values and returns a\n   979\t    \"compressed\" version of those values -- a single value.\n   980\t\n   981\t    You'll probably want to use this with MultiWidget.\n   982\t    \"\"\"\n   983\t    default_error_messages = {\n   984\t        'invalid': _('Enter a list of values.'),\n   985\t        'incomplete': _('Enter a complete value.'),\n   986\t    }\n   987\t\n   988\t    def __init__(self, fields, *, require_all_fields=True, **kwargs):\n   989\t        self.require_all_fields = require_all_fields\n   990\t        super().__init__(**kwargs)\n   991\t        for f in fields:\n   992\t            f.error_messages.setdefault('incomplete',\n   993\t                                        self.error_messages['incomplete'])\n   994\t            if self.disabled:\n   995\t                f.disabled = True\n   996\t            if self.require_all_fields:\n   997\t                # Set 'required' to False on the individual fields, because the\n   998\t                # required validation will be handled by MultiValueField, not\n   999\t                # by those individual fields.\n  1000\t                f.required = False\n  1001\t        self.fields = fields\n  1002\t\n  1003\t    def __deepcopy__(self, memo):\n  1004\t        result = super().__deepcopy__(memo)\n  1005\t        result.fields = tuple(x.__deepcopy__(memo) for x in self.fields)\n  1006\t        return result\n  1007\t\n  1008\t    def validate(self, value):\n  1009\t        pass\n  1010"
+    },
+    {
+        "step": 7,
+        "thought": "",
+        "action": "grep -A 5 \"class SplitDateTimeField\" /testbed/django/forms/fields.py",
+        "observation": "OBSERVATION:\nclass SplitDateTimeField(MultiValueField):\n    widget = SplitDateTimeWidget\n    hidden_widget = SplitHiddenDateTimeWidget\n    default_error_messages = {\n        'invalid_date': _('Enter a valid date.'),\n        'invalid_time': _('Enter a valid time.'),"
+    },
+    {
+        "step": 8,
+        "thought": "",
+        "action": "grep -A 10 \"def compress\" /testbed/django/forms/fields.py | grep -B 10 \"SplitDateTimeField\" -A 20",
+        "observation": "OBSERVATION:\n        For example, if this MultiValueField was instantiated with\n        fields=(DateField(), TimeField()), this might return a datetime\n        object created by combining the date and time in data_list.\n        \"\"\"\n        raise NotImplementedError('Subclasses must implement this method.')\n\n--\n    def compress(self, data_list):\n        if data_list:\n            # Raise a validation error if time or date is empty\n            # (possible if SplitDateTimeField has required=False).\n            if data_list[0] in self.empty_values:\n                raise ValidationError(self.error_messages['invalid_date'], code='invalid_date')\n            if data_list[1] in self.empty_values:\n                raise ValidationError(self.error_messages['invalid_time'], code='invalid_time')\n            result = datetime.datetime.combine(*data_list)\n            return from_current_timezone(result)\n        return None"
+    },
+    {
+        "step": 9,
+        "thought": "",
+        "action": "grep -r \"require_all_fields=False\" /testbed/django/forms",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 10,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/test_multi_value_field.py --file_text 'import django\nfrom django.conf import settings\nfrom django.forms import (\n    Form,\n    CharField,\n    MultiValueField,\n    MultiWidget,\n    ValidationError\n)\n\nif not settings.configured:\n    settings.configure()\ndjango.setup()\n\nclass MF(MultiValueField):\n    def __init__(self, **kwargs):\n        require_all_fields = kwargs.pop('\"'\"'require_all_fields'\"'\"', False)\n        required = kwargs.pop('\"'\"'required'\"'\"', False)\n        fields = [\n            CharField(required=False),\n            CharField(required=True),\n        ]\n        widget = MultiWidget(widgets=[f.widget for f in fields])\n        super().__init__(\n            fields=fields,\n            widget=widget,\n            require_all_fields=require_all_fields,\n            required=required,\n            **kwargs\n        )\n    def compress(self, value):\n        return value\n\ndef test():\n    print(\"Test 1: required=False, require_all_fields=False, empty input\")\n    f1 = MF(required=False, require_all_fields=False)\n    try:\n        res1 = f1.clean(['\"'\"''\"'\"', '\"'\"''\"'\"'])\n        print(f\"Result 1: {res1}\")\n    except ValidationError as e:\n        print(f\"Caught expected error: {e.messages}\")\n\n    print(\"\\nTest 2: required=False, require_all_fields=True, empty input\")\n    f2 = MF(required=False, require_all_fields=True)\n    try:\n        res2 = f2.clean(['\"'\"''\"'\"', '\"'\"''\"'\"'])\n        print(f\"Result 2: {res2}\")\n    except ValidationError as e:\n        print(f\"Error 2: {e.messages}\")\n\n    print(\"\\nTest 3: required=True, require_all_fields=False, empty input\")\n    f3 = MF(required=True, require_all_fields=False)\n    try:\n        res3 = f3.clean(['\"'\"''\"'\"', '\"'\"''\"'\"'])\n        print(f\"Result 3: {res3}\")\n    except ValidationError as e:\n        print(f\"Caught expected error: {e.messages}\")\n\n    print(\"\\nTest 4: required=False, require_all_fields=False, one field filled\")\n    f4 = MF(required=False, require_all_fields=False)\n    try:\n        res4 = f4.clean(['\"'\"'xxx'\"'\"', '\"'\"''\"'\"'])\n        print(f\"Result 4: {res4}\")\n    except ValidationError as e:\n        print(f\"Caught expected error: {e.messages}\")\n\n    print(\"\\nTest 5: required=False, require_all_fields=False, all fields filled\")\n    f5 = MF(required=False, require_all_fields=False)\n    try:\n        res5 = f5.clean(['\"'\"'xxx'\"'\"', '\"'\"'yyy'\"'\"'])\n        print(f\"Result 5: {res5}\")\n    except ValidationError as e:\n        print(f\"Error 5: {e.messages}\")\n\nif __name__ == \"__main__\":\n    test()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_multi_value_field.py"
+    },
+    {
+        "step": 11,
+        "thought": "",
+        "action": "python /testbed/test_multi_value_field.py",
+        "observation": "OBSERVATION:\nTest 1: required=False, require_all_fields=False, empty input\nResult 1: []\n\nTest 2: required=False, require_all_fields=True, empty input\nResult 2: []\n\nTest 3: required=True, require_all_fields=False, empty input\nCaught expected error: ['This field is required.']\n\nTest 4: required=False, require_all_fields=False, one field filled\nCaught expected error: ['Enter a complete value.']\n\nTest 5: required=False, require_all_fields=False, all fields filled\nResult 5: ['xxx', 'yyy']"
+    },
+    {
+        "step": 12,
+        "thought": "",
+        "action": "str_replace_editor insert /testbed/test_multi_value_field.py    --new_str '        print(f\"DEBUG: field0.required={self.fields[0].required}, field1.required={self.fields[1].required}\")\n' --insert_line 26",
+        "observation": "OBSERVATION:\nThe file /testbed/test_multi_value_field.py has been edited. Here's the result of running `cat -n` on a snippet of the edited file:\n    23\t        widget = MultiWidget(widgets=[f.widget for f in fields])\n    24\t        super().__init__(\n    25\t            fields=fields,\n    26\t            widget=widget,\n    27\t        print(f\"DEBUG: field0.required={self.fields[0].required}, field1.required={self.fields[1].required}\")\n    28\t\n    29\t            require_all_fields=require_all_fields,\n    30\t            required=required,\n    31\t            **kwargs\n    32\t        )\nReview the changes and make sure they are as expected (correct indentation, no duplicate lines, etc). Edit the file again if necessary."
+    },
+    {
+        "step": 13,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/test_multi_value_field.py   --old_str '        super().__init__(\n            fields=fields,\n            widget=widget,\n        print(f\"DEBUG: field0.required={self.fields[0].required}, field1.required={self.fields[1].required}\")\n\n            require_all_fields=require_all_fields,\n            required=required,\n            **kwargs\n        )\n' --new_str '        super().__init__(\n            fields=fields,\n            widget=widget,\n            require_all_fields=require_all_fields,\n            required=required,\n            **kwargs\n        )\n        print(f\"DEBUG {require_all_fields}: field0.required={self.fields[0].required}, field1.required={self.fields[1].required}\")\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/test_multi_value_field.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test_multi_value_field.py:\n    19\t        fields = [\n    20\t            CharField(required=False),\n    21\t            CharField(required=True),\n    22\t        ]\n    23\t        widget = MultiWidget(widgets=[f.widget for f in fields])\n    24\t        super().__init__(\n    25\t            fields=fields,\n    26\t            widget=widget,\n    27\t            require_all_fields=require_all_fields,\n    28\t            required=required,\n    29\t            **kwargs\n    30\t        )\n    31\t        print(f\"DEBUG {require_all_fields}: field0.required={self.fields[0].required}, field1.required={self.fields[1].required}\")\n    32\t    def compress(self, value):\n    33\t        return value\n    34\t\n    35\tdef test():\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 14,
+        "thought": "",
+        "action": "python /testbed/test_multi_value_field.py",
+        "observation": "OBSERVATION:\nTest 1: required=False, require_all_fields=False, empty input\nDEBUG False: field0.required=False, field1.required=True\nResult 1: []\n\nTest 2: required=False, require_all_fields=True, empty input\nDEBUG True: field0.required=False, field1.required=False\nResult 2: []\n\nTest 3: required=True, require_all_fields=False, empty input\nDEBUG False: field0.required=False, field1.required=True\nCaught expected error: ['This field is required.']\n\nTest 4: required=False, require_all_fields=False, one field filled\nDEBUG False: field0.required=False, field1.required=True\nCaught expected error: ['Enter a complete value.']\n\nTest 5: required=False, require_all_fields=False, all fields filled\nDEBUG False: field0.required=False, field1.required=True\nResult 5: ['xxx', 'yyy']"
+    },
+    {
+        "step": 15,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/django/forms/fields.py   --old_str '        if not value or isinstance(value, (list, tuple)):\n            if not value or not [v for v in value if v not in self.empty_values]:\n                if self.required:\n                    raise ValidationError(self.error_messages['\"'\"'required'\"'\"'], code='\"'\"'required'\"'\"')\n                else:\n                    return self.compress([])\n        else:\n            raise ValidationError(self.error_messages['\"'\"'invalid'\"'\"'], code='\"'\"'invalid'\"'\"')\n' --new_str '        if not value or isinstance(value, (list, tuple)):\n            if not value or not [v for v in value if v not in self.empty_values]:\n                if self.required:\n                    raise ValidationError(self.error_messages['\"'\"'required'\"'\"'], code='\"'\"'required'\"'\"')\n                elif self.require_all_fields or not any(field.required for field in self.fields):\n                    return self.compress([])\n        else:\n            raise ValidationError(self.error_messages['\"'\"'invalid'\"'\"'], code='\"'\"'invalid'\"'\"')\n        if not value:\n            value = []\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/django/forms/fields.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/django/forms/fields.py:\n  1019\t        \"\"\"\n  1020\t        clean_data = []\n  1021\t        errors = []\n  1022\t        if self.disabled and not isinstance(value, list):\n  1023\t            value = self.widget.decompress(value)\n  1024\t        if not value or isinstance(value, (list, tuple)):\n  1025\t            if not value or not [v for v in value if v not in self.empty_values]:\n  1026\t                if self.required:\n  1027\t                    raise ValidationError(self.error_messages['required'], code='required')\n  1028\t                elif self.require_all_fields or not any(field.required for field in self.fields):\n  1029\t                    return self.compress([])\n  1030\t        else:\n  1031\t            raise ValidationError(self.error_messages['invalid'], code='invalid')\n  1032\t        if not value:\n  1033\t            value = []\n  1034\t        for i, field in enumerate(self.fields):\n  1035\t            try:\n  1036\t                field_value = value[i]\n  1037\t            except IndexError:\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 16,
+        "thought": "",
+        "action": "python /testbed/test_multi_value_field.py",
+        "observation": "OBSERVATION:\nTest 1: required=False, require_all_fields=False, empty input\nDEBUG False: field0.required=False, field1.required=True\nCaught expected error: ['Enter a complete value.']\n\nTest 2: required=False, require_all_fields=True, empty input\nDEBUG True: field0.required=False, field1.required=False\nResult 2: []\n\nTest 3: required=True, require_all_fields=False, empty input\nDEBUG False: field0.required=False, field1.required=True\nCaught expected error: ['This field is required.']\n\nTest 4: required=False, require_all_fields=False, one field filled\nDEBUG False: field0.required=False, field1.required=True\nCaught expected error: ['Enter a complete value.']\n\nTest 5: required=False, require_all_fields=False, all fields filled\nDEBUG False: field0.required=False, field1.required=True\nResult 5: ['xxx', 'yyy']"
+    },
+    {
+        "step": 17,
+        "thought": "",
+        "action": "python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\nCase 1 (empty values): is_valid = False\nSuccess: Case 1 is invalid.\nCase 2 (one non-empty): is_valid = False\nSuccess: Case 2 is invalid."
+    },
+    {
+        "step": 18,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/django/forms/fields.py  --view_range 1000 1030",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/django/forms/fields.py:\n  1000\t                f.required = False\n  1001\t        self.fields = fields\n  1002\t\n  1003\t    def __deepcopy__(self, memo):\n  1004\t        result = super().__deepcopy__(memo)\n  1005\t        result.fields = tuple(x.__deepcopy__(memo) for x in self.fields)\n  1006\t        return result\n  1007\t\n  1008\t    def validate(self, value):\n  1009\t        pass\n  1010\t\n  1011\t    def clean(self, value):\n  1012\t        \"\"\"\n  1013\t        Validate every value in the given list. A value is validated against\n  1014\t        the corresponding Field in self.fields.\n  1015\t\n  1016\t        For example, if this MultiValueField was instantiated with\n  1017\t        fields=(DateField(), TimeField()), clean() would call\n  1018\t        DateField.clean(value[0]) and TimeField.clean(value[1]).\n  1019\t        \"\"\"\n  1020\t        clean_data = []\n  1021\t        errors = []\n  1022\t        if self.disabled and not isinstance(value, list):\n  1023\t            value = self.widget.decompress(value)\n  1024\t        if not value or isinstance(value, (list, tuple)):\n  1025\t            if not value or not [v for v in value if v not in self.empty_values]:\n  1026\t                if self.required:\n  1027\t                    raise ValidationError(self.error_messages['required'], code='required')\n  1028\t                elif self.require_all_fields or not any(field.required for field in self.fields):\n  1029\t                    return self.compress([])\n  1030\t        else:"
+    },
+    {
+        "step": 19,
+        "thought": "",
+        "action": "ls /testbed/tests/forms_tests/field_tests/",
+        "observation": "OBSERVATION:\n__init__.py\t\ttest_genericipaddressfield.py\nfilepathfield_test_dir\ttest_imagefield.py\ntest_base.py\t\ttest_integerfield.py\ntest_booleanfield.py\ttest_jsonfield.py\ntest_charfield.py\ttest_multiplechoicefield.py\ntest_choicefield.py\ttest_multivaluefield.py\ntest_combofield.py\ttest_nullbooleanfield.py\ntest_datefield.py\ttest_regexfield.py\ntest_datetimefield.py\ttest_slugfield.py\ntest_decimalfield.py\ttest_splitdatetimefield.py\ntest_durationfield.py\ttest_timefield.py\ntest_emailfield.py\ttest_typedchoicefield.py\ntest_filefield.py\ttest_typedmultiplechoicefield.py\ntest_filepathfield.py\ttest_urlfield.py\ntest_floatfield.py\ttest_uuidfield.py"
+    },
+    {
+        "step": 20,
+        "thought": "",
+        "action": "cd /testbed && ./tests/runtests.py forms_tests.field_tests.test_multivaluefield forms_tests.field_tests.test_splitdatetimefield",
+        "observation": "OBSERVATION:\nTesting against Django installed in '/testbed/django' with up to 126 processes\nFound 15 test(s).\nSystem check identified no issues (0 silenced).\n...............\n----------------------------------------------------------------------\nRan 15 tests in 0.126s\n\nOK"
+    },
+    {
+        "step": 21,
+        "thought": "",
+        "action": "cd /testbed && ./tests/runtests.py forms_tests.field_tests",
+        "observation": "OBSERVATION:\nTesting against Django installed in '/testbed/django' with up to 126 processes\nFound 208 test(s).\nSystem check identified no issues (0 silenced).\n................................................................................................................................................................................................................\n----------------------------------------------------------------------\nRan 208 tests in 0.391s\n\nOK"
+    },
+    {
+        "step": 22,
+        "thought": "",
+        "action": "rm /testbed/reproduce_issue.py /testbed/test_multi_value_field.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 23,
+        "thought": "",
+        "action": "cd /testbed && ./tests/runtests.py forms_tests.field_tests.test_multivaluefield forms_tests.field_tests.test_splitdatetimefield",
+        "observation": "OBSERVATION:\nTesting against Django installed in '/testbed/django' with up to 126 processes\nFound 15 test(s).\nSystem check identified no issues (0 silenced).\n...............\n----------------------------------------------------------------------\nRan 15 tests in 0.036s\n\nOK"
+    },
+    {
+        "step": 24,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/django/forms/fields.py  --view_range 1020 1040",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/django/forms/fields.py:\n  1020\t        clean_data = []\n  1021\t        errors = []\n  1022\t        if self.disabled and not isinstance(value, list):\n  1023\t            value = self.widget.decompress(value)\n  1024\t        if not value or isinstance(value, (list, tuple)):\n  1025\t            if not value or not [v for v in value if v not in self.empty_values]:\n  1026\t                if self.required:\n  1027\t                    raise ValidationError(self.error_messages['required'], code='required')\n  1028\t                elif self.require_all_fields or not any(field.required for field in self.fields):\n  1029\t                    return self.compress([])\n  1030\t        else:\n  1031\t            raise ValidationError(self.error_messages['invalid'], code='invalid')\n  1032\t        if not value:\n  1033\t            value = []\n  1034\t        for i, field in enumerate(self.fields):\n  1035\t            try:\n  1036\t                field_value = value[i]\n  1037\t            except IndexError:\n  1038\t                field_value = None\n  1039\t            if field_value in self.empty_values:\n  1040\t                if self.require_all_fields:"
+    },
+    {
+        "step": 25,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\ndiff --git a/django/forms/fields.py b/django/forms/fields.py\nindex 65d6a9ec82..74ccfe2627 100644\n--- a/django/forms/fields.py\n+++ b/django/forms/fields.py\n@@ -1025,10 +1025,12 @@ class MultiValueField(Field):\n             if not value or not [v for v in value if v not in self.empty_values]:\n                 if self.required:\n                     raise ValidationError(self.error_messages['required'], code='required')\n-                else:\n+                elif self.require_all_fields or not any(field.required for field in self.fields):\n                     return self.compress([])\n         else:\n             raise ValidationError(self.error_messages['invalid'], code='invalid')\n+        if not value:\n+            value = []\n         for i, field in enumerate(self.fields):\n             try:\n                 field_value = value[i]"
+    }
+]

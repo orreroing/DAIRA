@@ -1,0 +1,140 @@
+[
+    {
+        "step": 1,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/reproduce_issue.py --file_text 'from sympy.combinatorics import DihedralGroup\n\ndef reproduce():\n    G = DihedralGroup(18)\n    try:\n        S2 = G.sylow_subgroup(p=2)\n        print(\"Success!\")\n    except IndexError as e:\n        print(f\"Caught expected IndexError: {e}\")\n        import traceback\n        traceback.print_exc()\n    except Exception as e:\n        print(f\"Caught unexpected exception: {type(e).__name__}: {e}\")\n        import traceback\n        traceback.print_exc()\n\nif __name__ == \"__main__\":\n    reproduce()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/reproduce_issue.py"
+    },
+    {
+        "step": 2,
+        "thought": "",
+        "action": "timeout 90s python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\nCaught expected IndexError: list assignment index out of range\nTraceback (most recent call last):\n  File \"/testbed/reproduce_issue.py\", line 6, in reproduce\n    S2 = G.sylow_subgroup(p=2)\n  File \"/testbed/sympy/combinatorics/perm_groups.py\", line 4354, in sylow_subgroup\n    blocks = self.minimal_blocks()\n  File \"/testbed/sympy/combinatorics/perm_groups.py\", line 2201, in minimal_blocks\n    del num_blocks[i], blocks[i]\nIndexError: list assignment index out of range"
+    },
+    {
+        "step": 3,
+        "thought": "",
+        "action": "run_hunter_trace /testbed/reproduce_issue.py sympy/combinatorics/perm_groups.py minimal_blocks 10",
+        "observation": "OBSERVATION:\n### Workflow Process Analysis: `minimal_blocks` in SymPy\n\nThe workflow process computes all minimal block systems (systems of imprimitivity) for a transitive permutation group. In this specific case, it is being called on a Dihedral Group of degree 18 ($D_{18}$).\n\nThe process follows these major phases:\n1.  **Transitivity Verification**: It first confirms the group is transitive using `is_transitive`.\n2.  **Stabilizer Orbit Analysis**: It computes a partial stabilizer of a base point (0) using `random_stab` and calculates its orbits. These orbits represent potential connections for forming blocks.\n3.  **Iterative Block Generation**: For representatives of these stabilizer orbits, it uses Atkinson’s algorithm (via `minimal_block`) to find the finest block system containing point 0 and the representative.\n4.  **Normalization and Deduplication**: Each found block system is normalized into a partition representation using `_number_blocks`.\n5.  **Refinement and Filtering**: The algorithm attempts to filter redundant or non-minimal blocks. Based on the trace, the execution fails during this final selection/deletion phase due to a mismatch between the loop index and the current state of the block lists.\n\n---\n\n### Execution Trace Diagram\n\n**Internal Representation**: `PermutationGroup(DihedralGroup(18))`\n**Top-Level Call**: `minimal_blocks(self, randomized=True)`\n\n```text\n(1) minimal_blocks (line 2133)\n│\n├── (2) is_transitive (line 2334) ───────────────────────────────────> Returns True\n│\n├── (3) schreier_vector (line 3702) ─────────────────────────────────> Returns [-1, 0, 0, ..., 1]\n│\n├── (4) random_stab (line 3311) [Point alpha=0]\n│   ├── (5) random_pr (line 3268) ───────────────────────────────────> Returns Permutation\n│   └── (6) orbit_rep (line 2787) ───────────────────────────────────> Returns Representative\n│   └── Returns Stabilizer Generator (Permutation)\n│\n├── (7) PermutationGroup.__new__ (line 120) [Construct Stabilizer Subgroup]\n│   └── Returns Subgroup Object\n│\n├── (8) orbits (line 2850) [Compute orbits of the stabilizer Subgroup]\n│   └── Returns [{0}, {1}, {2}, ..., {17}] (18 singleton orbits)\n│\n├── (9) Loop through Orbit Representatives:\n│   │\n│   ├── (10) minimal_block (line 2481) [Points [0, 1]]\n│   │   ├── (11) max_div (line 2442) ────────────────────────────────> Returns 9\n│   │   ├── (12) _union_find_merge/rep (lines 340/386) [Atkinson's Algorithm]\n│   │   └── Returns [0, 0, 0, 0, ..., 0] (Trivial block)\n│   │\n│   ├── (13) _number_blocks (line 2155) ─────────────────────────────> Returns ((0, 0, ...), 1)\n│   │\n│   ├── (14) minimal_block (line 2481) [Points [0, 2]]\n│   │   └── Returns [0, 1, 0, 1, ..., 1] (Block system of size 2)\n│   │\n│   ├── (15) _number_blocks (line 2155) ─────────────────────────────> Returns ((0, 1, ...), 2)\n│   │\n│   ├── (16) minimal_block (line 2481) [Points [0, 3]]\n│   │   └── Returns [0, 1, 2, 0, 1, 2, ...] (Block system of size 3)\n│   │\n│   ├── (17) _number_blocks (line 2155) ─────────────────────────────> Returns ((0, 1, 2, ...), 3)\n│   │\n│   ├── ... [Iterating through subsequent points 4, 5, 6] ...\n│   │\n│   └── (18) minimal_block (line 2481) [Points [0, 6]]\n│       └── Returns [0, 1, 2, 3, 4, 5, ...] (Block system of size 6)\n│\n├── (19) _number_blocks (line 2155) ─────────────────────────────────> Returns ((0, 1, 2, 3, 4, 5, ...), 6)\n│\n├── (20) all_points <setcomp> (line 2193) ───────────────────────────> Returns {0, 12, 6}\n│\n└── (21) Filtering Logic (line 2201)\n    └── ⚡ EXCEPTION: IndexError: list assignment index out of range\n```\n\n**Final Output**: `IndexError` at line 2201 inside `minimal_blocks`.\n\n---\n\n### Key Function Analysis\n\n1.  **Function and Location**: `minimal_blocks` at `/testbed/sympy/combinatorics/perm_groups.py:2133`\n    *   **Functional Boundary**: The entry point for identifying block systems that are minimal (those where no smaller non-trivial block system is contained within).\n    *   **Role in this Workflow**: Orchestrates the entire process—from stabilizer calculation to the final collection and refinement of candidate block systems. It manages the loop that converts orbit contacts into partitions.\n\n2.  **Function and Location**: `is_transitive` at `/testbed/sympy/combinatorics/perm_groups.py:2334`\n    *   **Functional Boundary**: Determines if the group can map any point in the set to any other point.\n    *   **Role in this Workflow**: Acts as a guard clause. Block systems (imprimitivity) are conceptually only defined for transitive groups in this context.\n\n3.  **Function and Location**: `minimal_block` at `/testbed/sympy/combinatorics/perm_groups.py:2481`\n    *   **Functional Boundary**: Implements Atkinson’s algorithm to find the smallest block system containing a specific set of points.\n    *   **Role in this Workflow**: It is the computational core. By passing the pair `[0, beta]`, it discovers the minimal partition structure induced by the group's action relative to those two points.\n\n4.  **Function and Location**: `_number_blocks` at `/testbed/sympy/combinatorics/perm_groups.py:2155`\n    *   **Functional Boundary**: Normalizes a list representing block assignments into a canonical tuple and returns the count of unique blocks.\n    *   **Role in this Workflow**: Enables comparison and deduplication of block systems. By mapping point assignments to a standard numerical sequence (e.g., `[0, 1, 0, 1]`), it allows the parent function to recognize identical structures.\n\n5.  **Function and Location**: `_union_find_merge` at `/testbed/sympy/combinatorics/perm_groups.py:340`\n    *   **Functional Boundary**: A helper for the Union-Find data structure used during partition merging.\n    *   **Role in this Workflow**: Critical for performance and correctness within `minimal_block`. It effectively \"collapses\" points into the same block as generators act upon them, ensuring the resulting partition is invariant under the group's action."
+    },
+    {
+        "step": 4,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/reproduce_issue_25.py --file_text 'from sympy.combinatorics import DihedralGroup\n\ndef reproduce_25():\n    G = DihedralGroup(2*25)\n    try:\n        S2 = G.sylow_subgroup(p=2)\n        print(\"Success for D50!\")\n    except IndexError as e:\n        print(f\"Caught expected IndexError for D50: {e}\")\n        import traceback\n        traceback.print_exc()\n    except Exception as e:\n        print(f\"Caught unexpected exception for D50: {type(e).__name__}: {e}\")\n        import traceback\n        traceback.print_exc()\n\nif __name__ == \"__main__\":\n    reproduce_25()\n darkness = DihedralGroup(50)\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/reproduce_issue_25.py"
+    },
+    {
+        "step": 5,
+        "thought": "",
+        "action": "timeout 90s python /testbed/reproduce_issue_25.py",
+        "observation": "OBSERVATION:\n  File \"/testbed/reproduce_issue_25.py\", line 19\n    darkness = DihedralGroup(50)\n                                ^\nIndentationError: unindent does not match any outer indentation level"
+    },
+    {
+        "step": 6,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/reproduce_issue_25.py   --old_str 'if __name__ == \"__main__\":\n    reproduce_25()\n darkness = DihedralGroup(50)\n' --new_str 'if __name__ == \"__main__\":\n    reproduce_25()\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/reproduce_issue_25.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/reproduce_issue_25.py:\n    12\t    except Exception as e:\n    13\t        print(f\"Caught unexpected exception for D50: {type(e).__name__}: {e}\")\n    14\t        import traceback\n    15\t        traceback.print_exc()\n    16\t\n    17\tif __name__ == \"__main__\":\n    18\t    reproduce_25()\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 7,
+        "thought": "",
+        "action": "timeout 90s python /testbed/reproduce_issue_25.py",
+        "observation": "OBSERVATION:\nCaught expected IndexError for D50: list assignment index out of range\nTraceback (most recent call last):\n  File \"/testbed/reproduce_issue_25.py\", line 6, in reproduce_25\n    S2 = G.sylow_subgroup(p=2)\n  File \"/testbed/sympy/combinatorics/perm_groups.py\", line 4354, in sylow_subgroup\n    blocks = self.minimal_blocks()\n  File \"/testbed/sympy/combinatorics/perm_groups.py\", line 2201, in minimal_blocks\n    del num_blocks[i], blocks[i]\nIndexError: list assignment index out of range"
+    },
+    {
+        "step": 8,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/combinatorics/perm_groups.py  --view_range 2133 2210",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/combinatorics/perm_groups.py:\n  2133\t    def minimal_blocks(self, randomized=True):\n  2134\t        '''\n  2135\t        For a transitive group, return the list of all minimal\n  2136\t        block systems. If a group is intransitive, return `False`.\n  2137\t\n  2138\t        Examples\n  2139\t        ========\n  2140\t        >>> from sympy.combinatorics import Permutation\n  2141\t        >>> from sympy.combinatorics.perm_groups import PermutationGroup\n  2142\t        >>> from sympy.combinatorics.named_groups import DihedralGroup\n  2143\t        >>> DihedralGroup(6).minimal_blocks()\n  2144\t        [[0, 1, 0, 1, 0, 1], [0, 1, 2, 0, 1, 2]]\n  2145\t        >>> G = PermutationGroup(Permutation(1,2,5))\n  2146\t        >>> G.minimal_blocks()\n  2147\t        False\n  2148\t\n  2149\t        See Also\n  2150\t        ========\n  2151\t\n  2152\t        minimal_block, is_transitive, is_primitive\n  2153\t\n  2154\t        '''\n  2155\t        def _number_blocks(blocks):\n  2156\t            # number the blocks of a block system\n  2157\t            # in order and return the number of\n  2158\t            # blocks and the tuple with the\n  2159\t            # reordering\n  2160\t            n = len(blocks)\n  2161\t            appeared = {}\n  2162\t            m = 0\n  2163\t            b = [None]*n\n  2164\t            for i in range(n):\n  2165\t                if blocks[i] not in appeared:\n  2166\t                    appeared[blocks[i]] = m\n  2167\t                    b[i] = m\n  2168\t                    m += 1\n  2169\t                else:\n  2170\t                    b[i] = appeared[blocks[i]]\n  2171\t            return tuple(b), m\n  2172\t\n  2173\t        if not self.is_transitive():\n  2174\t            return False\n  2175\t        blocks = []\n  2176\t        num_blocks = []\n  2177\t        rep_blocks = []\n  2178\t        if randomized:\n  2179\t            random_stab_gens = []\n  2180\t            v = self.schreier_vector(0)\n  2181\t            for i in range(len(self)):\n  2182\t                random_stab_gens.append(self.random_stab(0, v))\n  2183\t            stab = PermutationGroup(random_stab_gens)\n  2184\t        else:\n  2185\t            stab = self.stabilizer(0)\n  2186\t        orbits = stab.orbits()\n  2187\t        for orb in orbits:\n  2188\t            x = orb.pop()\n  2189\t            if x != 0:\n  2190\t                block = self.minimal_block([0, x])\n  2191\t                num_block, m = _number_blocks(block)\n  2192\t                # a representative block (containing 0)\n  2193\t                rep = {j for j in range(self.degree) if num_block[j] == 0}\n  2194\t                # check if the system is minimal with\n  2195\t                # respect to the already discovere ones\n  2196\t                minimal = True\n  2197\t                to_remove = []\n  2198\t                for i, r in enumerate(rep_blocks):\n  2199\t                    if len(r) > len(rep) and rep.issubset(r):\n  2200\t                        # i-th block system is not minimal\n  2201\t                        del num_blocks[i], blocks[i]\n  2202\t                        to_remove.append(rep_blocks[i])\n  2203\t                    elif len(r) < len(rep) and r.issubset(rep):\n  2204\t                        # the system being checked is not minimal\n  2205\t                        minimal = False\n  2206\t                        break\n  2207\t                # remove non-minimal representative blocks\n  2208\t                rep_blocks = [r for r in rep_blocks if r not in to_remove]\n  2209\t\n  2210\t                if minimal and num_block not in num_blocks:"
+    },
+    {
+        "step": 9,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sympy/combinatorics/perm_groups.py  --view_range 2207 2215",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sympy/combinatorics/perm_groups.py:\n  2207\t                # remove non-minimal representative blocks\n  2208\t                rep_blocks = [r for r in rep_blocks if r not in to_remove]\n  2209\t\n  2210\t                if minimal and num_block not in num_blocks:\n  2211\t                    blocks.append(block)\n  2212\t                    num_blocks.append(num_block)\n  2213\t                    rep_blocks.append(rep)\n  2214\t        return blocks\n  2215"
+    },
+    {
+        "step": 10,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/sympy/combinatorics/perm_groups.py   --old_str '                to_remove = []\n                for i, r in enumerate(rep_blocks):\n                    if len(r) > len(rep) and rep.issubset(r):\n                        # i-th block system is not minimal\n                        del num_blocks[i], blocks[i]\n                        to_remove.append(rep_blocks[i])\n                    elif len(r) < len(rep) and r.issubset(rep):\n                        # the system being checked is not minimal\n                        minimal = False\n                        break\n                # remove non-minimal representative blocks\n                rep_blocks = [r for r in rep_blocks if r not in to_remove]\n\n                if minimal and num_block not in num_blocks:\n                    blocks.append(block)\n                    num_blocks.append(num_block)\n                    rep_blocks.append(rep)' --new_str '                to_remove = []\n                for i, r in enumerate(rep_blocks):\n                    if len(r) > len(rep) and rep.issubset(r):\n                        # i-th block system is not minimal\n                        to_remove.append(i)\n                    elif len(r) < len(rep) and r.issubset(rep):\n                        # the system being checked is not minimal\n                        minimal = False\n                        break\n                if minimal:\n                    # remove non-minimal representative blocks\n                    for i in sorted(to_remove, reverse=True):\n                        del num_blocks[i], blocks[i], rep_blocks[i]\n\n                    if num_block not in num_blocks:\n                        blocks.append(block)\n                        num_blocks.append(num_block)\n                        rep_blocks.append(rep)'",
+        "observation": "OBSERVATION:\nThe file /testbed/sympy/combinatorics/perm_groups.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/sympy/combinatorics/perm_groups.py:\n  2192\t                # a representative block (containing 0)\n  2193\t                rep = {j for j in range(self.degree) if num_block[j] == 0}\n  2194\t                # check if the system is minimal with\n  2195\t                # respect to the already discovere ones\n  2196\t                minimal = True\n  2197\t                to_remove = []\n  2198\t                for i, r in enumerate(rep_blocks):\n  2199\t                    if len(r) > len(rep) and rep.issubset(r):\n  2200\t                        # i-th block system is not minimal\n  2201\t                        to_remove.append(i)\n  2202\t                    elif len(r) < len(rep) and r.issubset(rep):\n  2203\t                        # the system being checked is not minimal\n  2204\t                        minimal = False\n  2205\t                        break\n  2206\t                if minimal:\n  2207\t                    # remove non-minimal representative blocks\n  2208\t                    for i in sorted(to_remove, reverse=True):\n  2209\t                        del num_blocks[i], blocks[i], rep_blocks[i]\n  2210\t\n  2211\t                    if num_block not in num_blocks:\n  2212\t                        blocks.append(block)\n  2213\t                        num_blocks.append(num_block)\n  2214\t                        rep_blocks.append(rep)\n  2215\t        return blocks\n  2216\t\n  2217\t    @property\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 11,
+        "thought": "",
+        "action": "timeout 90s python /testbed/reproduce_issue.py && timeout 90s python /testbed/reproduce_issue_25.py",
+        "observation": "OBSERVATION:\nSuccess!\nSuccess for D50!"
+    },
+    {
+        "step": 12,
+        "thought": "",
+        "action": "find /testbed/sympy/combinatorics -name \"test_*.py\" | xargs grep -l \"minimal_blocks\"",
+        "observation": "OBSERVATION:\n/testbed/sympy/combinatorics/tests/test_perm_groups.py"
+    },
+    {
+        "step": 13,
+        "thought": "",
+        "action": "timeout 90s pytest /testbed/sympy/combinatorics/tests/test_perm_groups.py",
+        "observation": "OBSERVATION:\ntimeout: failed to run command ‘pytest’: No such file or directory"
+    },
+    {
+        "step": 14,
+        "thought": "",
+        "action": "ls /testbed/bin/test",
+        "observation": "OBSERVATION:\n/testbed/bin/test"
+    },
+    {
+        "step": 15,
+        "thought": "",
+        "action": "timeout 90s python -m pytest /testbed/sympy/combinatorics/tests/test_perm_groups.py",
+        "observation": "OBSERVATION:\n/opt/miniconda3/envs/testbed/bin/python: No module named pytest"
+    },
+    {
+        "step": 16,
+        "thought": "",
+        "action": "timeout 120s /testbed/bin/test /testbed/sympy/combinatorics/tests/test_perm_groups.py",
+        "observation": "OBSERVATION:\n============================= test process starts ==============================\nexecutable:         /opt/miniconda3/envs/testbed/bin/python  (3.9.20-final-0) [CPython]\narchitecture:       64-bit\ncache:              yes\nground types:       python \nnumpy:              None\nrandom seed:        73610570\nhash randomization: on (PYTHONHASHSEED=854865899)\n\nsympy/combinatorics/tests/test_perm_groups.py[61] ...............f..............\n.f................w............                                             [OK]\n\n== tests finished: 58 passed, 1 skipped, 2 expected to fail, in 2.43 seconds ==="
+    },
+    {
+        "step": 17,
+        "thought": "",
+        "action": "grep \"minimal_blocks\" /testbed/sympy/combinatorics/tests/test_perm_groups.py",
+        "observation": "OBSERVATION:\ndef test_minimal_blocks():\n    assert P.minimal_blocks() == [[0, 1, 0, 1, 0, 1], [0, 1, 2, 0, 1, 2]]\n    assert P.minimal_blocks() == [[0]*5]\n    assert P.minimal_blocks() == False"
+    },
+    {
+        "step": 18,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/check_primitive.py --file_text 'from sympy.combinatorics.named_groups import SymmetricGroup, DihedralGroup\n\ndef check_primitive():\n    G = SymmetricGroup(5)\n    print(f\"S5 minimal blocks: {G.minimal_blocks()}\")\n    G = DihedralGroup(5)\n    print(f\"D5 minimal blocks: {G.minimal_blocks()}\")\n    G = DihedralGroup(6)\n    print(f\"D6 minimal blocks: {G.minimal_blocks()}\")\n\nif __name__ == \"__main__\":\n    check_primitive()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/check_primitive.py"
+    },
+    {
+        "step": 19,
+        "thought": "",
+        "action": "python /testbed/check_primitive.py",
+        "observation": "OBSERVATION:\nS5 minimal blocks: [[0, 0, 0, 0, 0]]\nD5 minimal blocks: [[0, 0, 0, 0, 0]]\nD6 minimal blocks: [[0, 1, 0, 1, 0, 1], [0, 1, 2, 0, 1, 2]]"
+    },
+    {
+        "step": 20,
+        "thought": "",
+        "action": "rm /testbed/reproduce_issue.py /testbed/reproduce_issue_25.py /testbed/check_primitive.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 21,
+        "thought": "",
+        "action": "timeout 120s /testbed/bin/test /testbed/sympy/combinatorics/tests/test_perm_groups.py",
+        "observation": "OBSERVATION:\n============================= test process starts ==============================\nexecutable:         /opt/miniconda3/envs/testbed/bin/python  (3.9.20-final-0) [CPython]\narchitecture:       64-bit\ncache:              yes\nground types:       python \nnumpy:              None\nrandom seed:        48182272\nhash randomization: on (PYTHONHASHSEED=437433514)\n\nsympy/combinatorics/tests/test_perm_groups.py[61] ...............f..............\n.f................w............                                             [OK]\n\n== tests finished: 58 passed, 1 skipped, 2 expected to fail, in 2.57 seconds ==="
+    },
+    {
+        "step": 22,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\nThank you for your work on this issue. Please carefully follow the steps below to help review your changes.\n\n1. If you made any changes to your code after running the reproduction script, please run the reproduction script again.\n  If the reproduction script is failing, please revisit your changes and make sure they are correct.\n  If you have already removed your reproduction script, please ignore this step.\n2. Remove your reproduction script (if you haven't done so already).\n3. If you have modified any TEST files, please revert them to the state they had before you started fixing the issue.\n  You can do this with `git checkout -- /path/to/test/file.py`. Use below <diff> to find the files you need to revert.\n4. Run the submit command again to confirm.\n\nHere is a list of all of your changes:\n\n<diff>\ndiff --git a/sympy/combinatorics/perm_groups.py b/sympy/combinatorics/perm_groups.py\nindex de94ddabb4..df30d182cb 100644\n--- a/sympy/combinatorics/perm_groups.py\n+++ b/sympy/combinatorics/perm_groups.py\n@@ -2198,19 +2198,20 @@ def _number_blocks(blocks):\n                 for i, r in enumerate(rep_blocks):\n                     if len(r) > len(rep) and rep.issubset(r):\n                         # i-th block system is not minimal\n-                        del num_blocks[i], blocks[i]\n-                        to_remove.append(rep_blocks[i])\n+                        to_remove.append(i)\n                     elif len(r) < len(rep) and r.issubset(rep):\n                         # the system being checked is not minimal\n                         minimal = False\n                         break\n-                # remove non-minimal representative blocks\n-                rep_blocks = [r for r in rep_blocks if r not in to_remove]\n-\n-                if minimal and num_block not in num_blocks:\n-                    blocks.append(block)\n-                    num_blocks.append(num_block)\n-                    rep_blocks.append(rep)\n+                if minimal:\n+                    # remove non-minimal representative blocks\n+                    for i in sorted(to_remove, reverse=True):\n+                        del num_blocks[i], blocks[i], rep_blocks[i]\n+\n+                    if num_block not in num_blocks:\n+                        blocks.append(block)\n+                        num_blocks.append(num_block)\n+                        rep_blocks.append(rep)\n         return blocks\n \n     @property\n\n</diff>"
+    },
+    {
+        "step": 23,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\ndiff --git a/sympy/combinatorics/perm_groups.py b/sympy/combinatorics/perm_groups.py\nindex de94ddabb4..df30d182cb 100644\n--- a/sympy/combinatorics/perm_groups.py\n+++ b/sympy/combinatorics/perm_groups.py\n@@ -2198,19 +2198,20 @@ def _number_blocks(blocks):\n                 for i, r in enumerate(rep_blocks):\n                     if len(r) > len(rep) and rep.issubset(r):\n                         # i-th block system is not minimal\n-                        del num_blocks[i], blocks[i]\n-                        to_remove.append(rep_blocks[i])\n+                        to_remove.append(i)\n                     elif len(r) < len(rep) and r.issubset(rep):\n                         # the system being checked is not minimal\n                         minimal = False\n                         break\n-                # remove non-minimal representative blocks\n-                rep_blocks = [r for r in rep_blocks if r not in to_remove]\n-\n-                if minimal and num_block not in num_blocks:\n-                    blocks.append(block)\n-                    num_blocks.append(num_block)\n-                    rep_blocks.append(rep)\n+                if minimal:\n+                    # remove non-minimal representative blocks\n+                    for i in sorted(to_remove, reverse=True):\n+                        del num_blocks[i], blocks[i], rep_blocks[i]\n+\n+                    if num_block not in num_blocks:\n+                        blocks.append(block)\n+                        num_blocks.append(num_block)\n+                        rep_blocks.append(rep)\n         return blocks\n \n     @property"
+    }
+]

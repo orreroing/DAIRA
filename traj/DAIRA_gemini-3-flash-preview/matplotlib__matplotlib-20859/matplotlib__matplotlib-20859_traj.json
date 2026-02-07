@@ -1,0 +1,326 @@
+[
+    {
+        "step": 1,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/reproduce_issue.py --file_text 'import matplotlib.pyplot as plt\nimport matplotlib\nprint(f\"Matplotlib version: {matplotlib.__version__}\")\n\ntry:\n    fig = plt.figure()\n    subfigs = fig.subfigures()\n    # fig.subfigures() can return a single SubFigure or an array of them.\n    # In the PR description, it seems it'\"'\"'s treated as a single SubFigure.\n    # Actually, fig.subfigures() returns a SubFigure or list of SubFigures depending on arguments.\n    # By default fig.subfigures() returns a single SubFigure if no nrows/ncols are given? \n    # Wait, looking at the docs or common usage:\n    # subfigs = fig.subfigures(2, 1) returns a list.\n    # Let'\"'\"'s check what fig.subfigures() does.\n    \n    subfig = fig.subfigures()\n    ax = subfig.subplots()\n    ax.plot([0, 1, 2], [0, 1, 2], label=\"test\")\n    print(\"Attempting to add legend to subfigure...\")\n    subfig.legend()\n    print(\"Successfully added legend to subfigure.\")\nexcept Exception as e:\n    import traceback\n    traceback.print_exc()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/reproduce_issue.py"
+    },
+    {
+        "step": 2,
+        "thought": "",
+        "action": "timeout 90s python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\nMatplotlib version: 3.4.2.post1716+g64619e53e9\nAttempting to add legend to subfigure...\nTraceback (most recent call last):\n  File \"/testbed/reproduce_issue.py\", line 20, in <module>\n    subfig.legend()\n  File \"/testbed/lib/matplotlib/figure.py\", line 1068, in legend\n    l = mlegend.Legend(self, handles, labels, *extra_args,\n  File \"/testbed/lib/matplotlib/legend.py\", line 441, in __init__\n    raise TypeError(\"Legend needs either Axes or Figure as parent\")\nTypeError: Legend needs either Axes or Figure as parent"
+    },
+    {
+        "step": 3,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/legend.py  --view_range 430 450",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/legend.py:\n   430\t        # method.\n   431\t        self._legend_box = None\n   432\t\n   433\t        if isinstance(parent, Axes):\n   434\t            self.isaxes = True\n   435\t            self.axes = parent\n   436\t            self.set_figure(parent.figure)\n   437\t        elif isinstance(parent, Figure):\n   438\t            self.isaxes = False\n   439\t            self.set_figure(parent)\n   440\t        else:\n   441\t            raise TypeError(\"Legend needs either Axes or Figure as parent\")\n   442\t        self.parent = parent\n   443\t\n   444\t        self._loc_used_default = loc is None\n   445\t        if loc is None:\n   446\t            loc = mpl.rcParams[\"legend.loc\"]\n   447\t            if not self.isaxes and loc in [0, 'best']:\n   448\t                loc = 'upper right'\n   449\t        if isinstance(loc, str):\n   450\t            loc = _api.check_getitem(self.codes, loc=loc)"
+    },
+    {
+        "step": 4,
+        "thought": "",
+        "action": "grep -E \"from .* import .*Axes\" /testbed/lib/matplotlib/legend.py\ngrep -E \"from .* import .*Figure\" /testbed/lib/matplotlib/legend.py",
+        "observation": "OBSERVATION:\n        from matplotlib.axes import Axes\n        from matplotlib.figure import Figure"
+    },
+    {
+        "step": 5,
+        "thought": "",
+        "action": "grep -C 5 \"class SubFigure\" /testbed/lib/matplotlib/figure.py",
+        "observation": "OBSERVATION:\n        a.stale_callback = _stale_figure_callback\n        a.set_transform(self.transSubfigure)\n\n\n@docstring.interpd\nclass SubFigure(FigureBase):\n    \"\"\"\n    Logical figure that can be placed inside a figure.\n\n    Typically instantiated using `.Figure.add_subfigure` or\n    `.SubFigure.add_subfigure`, or `.SubFigure.subfigures`.  A subfigure has"
+    },
+    {
+        "step": 6,
+        "thought": "",
+        "action": "grep -C 5 \"class Figure\" /testbed/lib/matplotlib/figure.py | head -n 20",
+        "observation": "OBSERVATION:\n            self.wspace = wspace\n        if hspace is not None:\n            self.hspace = hspace\n\n\nclass FigureBase(Artist):\n    \"\"\"\n    Base class for `.figure.Figure` and `.figure.SubFigure` containing the\n    methods that add artists to the figure or subfigure, create Axes, etc.\n    \"\"\"\n    def __init__(self, **kwargs):\n--\n        finally:\n            self.stale = False\n\n\n@docstring.interpd\nclass Figure(FigureBase):\n    \"\"\"\n    The top level container for all the plot elements."
+    },
+    {
+        "step": 7,
+        "thought": "",
+        "action": "grep \"def legend\" /testbed/lib/matplotlib/figure.py",
+        "observation": "OBSERVATION:\n    def legend(self, *args, **kwargs):"
+    },
+    {
+        "step": 8,
+        "thought": "",
+        "action": "grep -n \"def legend\" /testbed/lib/matplotlib/figure.py",
+        "observation": "OBSERVATION:\n941:    def legend(self, *args, **kwargs):"
+    },
+    {
+        "step": 9,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/figure.py  --view_range 930 950",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/figure.py:\n   930\t\n   931\t        for name in ax._axis_names:\n   932\t            last_ax = _break_share_link(ax, ax._shared_axes[name])\n   933\t            if last_ax is not None:\n   934\t                _reset_locators_and_formatters(getattr(last_ax, f\"{name}axis\"))\n   935\t\n   936\t    # Note: in the docstring below, the newlines in the examples after the\n   937\t    # calls to legend() allow replacing it with figlegend() to generate the\n   938\t    # docstring of pyplot.figlegend.\n   939\t\n   940\t    @docstring.dedent_interpd\n   941\t    def legend(self, *args, **kwargs):\n   942\t        \"\"\"\n   943\t        Place a legend on the figure.\n   944\t\n   945\t        Call signatures::\n   946\t\n   947\t            legend()\n   948\t            legend(handles, labels)\n   949\t            legend(handles=handles)\n   950\t            legend(labels)"
+    },
+    {
+        "step": 10,
+        "thought": "",
+        "action": "grep -B 500 \"def legend(self, \\*args, \\*\\*kwargs):\" /testbed/lib/matplotlib/figure.py | grep \"class \" | tail -n 1",
+        "observation": "OBSERVATION:\n            for the rectilinear base class `~.axes.Axes` can be found in"
+    },
+    {
+        "step": 11,
+        "thought": "",
+        "action": "head -n 941 /testbed/lib/matplotlib/figure.py | grep \"^class \" | tail -n 1",
+        "observation": "OBSERVATION:\nclass FigureBase(Artist):"
+    },
+    {
+        "step": 12,
+        "thought": "",
+        "action": "grep -n \"from matplotlib.figure import Figure\" /testbed/lib/matplotlib/legend.py",
+        "observation": "OBSERVATION:\n363:        from matplotlib.figure import Figure"
+    },
+    {
+        "step": 13,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/legend.py  --view_range 350 380",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/legend.py:\n   350\t        Notes\n   351\t        -----\n   352\t        Users can specify any arbitrary location for the legend using the\n   353\t        *bbox_to_anchor* keyword argument. *bbox_to_anchor* can be a\n   354\t        `.BboxBase` (or derived therefrom) or a tuple of 2 or 4 floats.\n   355\t        See `set_bbox_to_anchor` for more detail.\n   356\t\n   357\t        The legend location can be specified by setting *loc* with a tuple of\n   358\t        2 floats, which is interpreted as the lower-left corner of the legend\n   359\t        in the normalized axes coordinate.\n   360\t        \"\"\"\n   361\t        # local import only to avoid circularity\n   362\t        from matplotlib.axes import Axes\n   363\t        from matplotlib.figure import Figure\n   364\t\n   365\t        super().__init__()\n   366\t\n   367\t        if prop is None:\n   368\t            if fontsize is not None:\n   369\t                self.prop = FontProperties(size=fontsize)\n   370\t            else:\n   371\t                self.prop = FontProperties(\n   372\t                    size=mpl.rcParams[\"legend.fontsize\"])\n   373\t        else:\n   374\t            self.prop = FontProperties._from_any(prop)\n   375\t            if isinstance(prop, dict) and \"size\" not in prop:\n   376\t                self.prop.set_size(mpl.rcParams[\"legend.fontsize\"])\n   377\t\n   378\t        self._fontsize = self.prop.get_size_in_points()\n   379\t\n   380\t        self.texts = []"
+    },
+    {
+        "step": 14,
+        "thought": "",
+        "action": "grep -n \"def set_figure\" /testbed/lib/matplotlib/artist.py",
+        "observation": "OBSERVATION:\n719:    def set_figure(self, fig):"
+    },
+    {
+        "step": 15,
+        "thought": "",
+        "action": "grep -n \"class SubFigure\" /testbed/lib/matplotlib/figure.py",
+        "observation": "OBSERVATION:\n1924:class SubFigure(FigureBase):"
+    },
+    {
+        "step": 16,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/figure.py  --view_range 1924 1960",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/figure.py:\n  1924\tclass SubFigure(FigureBase):\n  1925\t    \"\"\"\n  1926\t    Logical figure that can be placed inside a figure.\n  1927\t\n  1928\t    Typically instantiated using `.Figure.add_subfigure` or\n  1929\t    `.SubFigure.add_subfigure`, or `.SubFigure.subfigures`.  A subfigure has\n  1930\t    the same methods as a figure except for those particularly tied to the size\n  1931\t    or dpi of the figure, and is confined to a prescribed region of the figure.\n  1932\t    For example the following puts two subfigures side-by-side::\n  1933\t\n  1934\t        fig = plt.figure()\n  1935\t        sfigs = fig.subfigures(1, 2)\n  1936\t        axsL = sfigs[0].subplots(1, 2)\n  1937\t        axsR = sfigs[1].subplots(2, 1)\n  1938\t\n  1939\t    See :doc:`/gallery/subplots_axes_and_figures/subfigures`\n  1940\t    \"\"\"\n  1941\t\n  1942\t    def __init__(self, parent, subplotspec, *,\n  1943\t                 facecolor=None,\n  1944\t                 edgecolor=None,\n  1945\t                 linewidth=0.0,\n  1946\t                 frameon=None,\n  1947\t                 **kwargs):\n  1948\t        \"\"\"\n  1949\t        Parameters\n  1950\t        ----------\n  1951\t        parent : `.figure.Figure` or `.figure.SubFigure`\n  1952\t            Figure or subfigure that contains the SubFigure.  SubFigures\n  1953\t            can be nested.\n  1954\t\n  1955\t        subplotspec : `.gridspec.SubplotSpec`\n  1956\t            Defines the region in a parent gridspec where the subfigure will\n  1957\t            be placed.\n  1958\t\n  1959\t        facecolor : default: :rc:`figure.facecolor`\n  1960\t            The figure patch face color."
+    },
+    {
+        "step": 17,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/figure.py  --view_range 1967 2000",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/figure.py:\n  1967\t            patch).\n  1968\t\n  1969\t        frameon : bool, default: :rc:`figure.frameon`\n  1970\t            If ``False``, suppress drawing the figure background patch.\n  1971\t\n  1972\t        Other Parameters\n  1973\t        ----------------\n  1974\t        **kwargs : `.SubFigure` properties, optional\n  1975\t\n  1976\t            %(SubFigure:kwdoc)s\n  1977\t        \"\"\"\n  1978\t        super().__init__(**kwargs)\n  1979\t        if facecolor is None:\n  1980\t            facecolor = mpl.rcParams['figure.facecolor']\n  1981\t        if edgecolor is None:\n  1982\t            edgecolor = mpl.rcParams['figure.edgecolor']\n  1983\t        if frameon is None:\n  1984\t            frameon = mpl.rcParams['figure.frameon']\n  1985\t\n  1986\t        self._subplotspec = subplotspec\n  1987\t        self._parent = parent\n  1988\t        self.figure = parent.figure\n  1989\t        # subfigures use the parent axstack\n  1990\t        self._axstack = parent._axstack\n  1991\t        self.subplotpars = parent.subplotpars\n  1992\t        self.dpi_scale_trans = parent.dpi_scale_trans\n  1993\t        self._axobservers = parent._axobservers\n  1994\t        self.canvas = parent.canvas\n  1995\t        self.transFigure = parent.transFigure\n  1996\t        self.bbox_relative = None\n  1997\t        self._redo_transform_rel_fig()\n  1998\t        self.figbbox = self._parent.figbbox\n  1999\t        self.bbox = TransformedBbox(self.bbox_relative,\n  2000\t                                    self._parent.transSubfigure)"
+    },
+    {
+        "step": 18,
+        "thought": "",
+        "action": "grep -n \"def add_axes\" /testbed/lib/matplotlib/figure.py",
+        "observation": "OBSERVATION:\n536:    def add_axes(self, *args, **kwargs):"
+    },
+    {
+        "step": 19,
+        "thought": "",
+        "action": "grep -n \"def text\" /testbed/lib/matplotlib/figure.py",
+        "observation": "OBSERVATION:\n1076:    def text(self, x, y, s, fontdict=None, **kwargs):"
+    },
+    {
+        "step": 20,
+        "thought": "",
+        "action": "grep -n \"self.legends =\" /testbed/lib/matplotlib/figure.py",
+        "observation": "OBSERVATION:\n212:        self.legends = []\n2719:        self.legends = []"
+    },
+    {
+        "step": 21,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/figure.py  --view_range 200 220",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/figure.py:\n   200\t        # axis._get_tick_boxes_siblings\n   201\t        self._align_label_groups = {\"x\": cbook.Grouper(), \"y\": cbook.Grouper()}\n   202\t\n   203\t        self.figure = self\n   204\t        # list of child gridspecs for this figure\n   205\t        self._gridspecs = []\n   206\t        self._localaxes = _AxesStack()  # track all axes and current axes\n   207\t        self.artists = []\n   208\t        self.lines = []\n   209\t        self.patches = []\n   210\t        self.texts = []\n   211\t        self.images = []\n   212\t        self.legends = []\n   213\t        self.subfigs = []\n   214\t        self.stale = True\n   215\t        self.suppressComposite = None\n   216\t        self.set(**kwargs)\n   217\t\n   218\t    def _get_draw_artists(self, renderer):\n   219\t        \"\"\"Also runs apply_aspect\"\"\"\n   220\t        artists = self.get_children()"
+    },
+    {
+        "step": 22,
+        "thought": "",
+        "action": "grep -n \"def draw\" /testbed/lib/matplotlib/legend.py",
+        "observation": "OBSERVATION:\n598:    def draw(self, renderer):"
+    },
+    {
+        "step": 23,
+        "thought": "",
+        "action": "grep -r \"isinstance(.*, Figure)\" /testbed/lib/matplotlib/lib/matplotlib | head -n 20",
+        "observation": "OBSERVATION:\ngrep: /testbed/lib/matplotlib/lib/matplotlib: No such file or directory"
+    },
+    {
+        "step": 24,
+        "thought": "",
+        "action": "grep -r \"isinstance(.*, Figure)\" /testbed/lib/matplotlib | head -n 20",
+        "observation": "OBSERVATION:\n/testbed/lib/matplotlib/legend.py:        elif isinstance(parent, Figure):\n/testbed/lib/matplotlib/backends/backend_pdf.py:        if not isinstance(figure, Figure):\n/testbed/lib/matplotlib/backends/backend_pgf.py:        if not isinstance(figure, Figure):\n/testbed/lib/matplotlib/tests/test_backend_bases.py:    assert isinstance(FigureCanvasBase().figure, Figure)\n/testbed/lib/matplotlib/pyplot.py:    if isinstance(num, Figure):\n/testbed/lib/matplotlib/pyplot.py:    elif isinstance(fig, Figure):"
+    },
+    {
+        "step": 25,
+        "thought": "",
+        "action": "grep -A 20 \"__all__ =\" /testbed/lib/matplotlib/figure.py | grep \"FigureBase\"",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 26,
+        "thought": "",
+        "action": "grep \"__all__ =\" /testbed/lib/matplotlib/figure.py -A 30",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 27,
+        "thought": "",
+        "action": "python -c \"from matplotlib.figure import FigureBase; print(FigureBase)\"",
+        "observation": "OBSERVATION:\n<class 'matplotlib.figure.FigureBase'>"
+    },
+    {
+        "step": 28,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/lib/matplotlib/legend.py   --old_str '        from matplotlib.axes import Axes\n        from matplotlib.figure import Figure\n\n        super().__init__()\n' --new_str '        from matplotlib.axes import Axes\n        from matplotlib.figure import Figure, FigureBase\n\n        super().__init__()\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/lib/matplotlib/legend.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/lib/matplotlib/legend.py:\n   357\t        The legend location can be specified by setting *loc* with a tuple of\n   358\t        2 floats, which is interpreted as the lower-left corner of the legend\n   359\t        in the normalized axes coordinate.\n   360\t        \"\"\"\n   361\t        # local import only to avoid circularity\n   362\t        from matplotlib.axes import Axes\n   363\t        from matplotlib.figure import Figure, FigureBase\n   364\t\n   365\t        super().__init__()\n   366\t\n   367\t        if prop is None:\n   368\t            if fontsize is not None:\n   369\t                self.prop = FontProperties(size=fontsize)\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 29,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/lib/matplotlib/legend.py   --old_str '        elif isinstance(parent, Figure):\n            self.isaxes = False\n            self.set_figure(parent)\n        else:\n            raise TypeError(\"Legend needs either Axes or Figure as parent\")\n' --new_str '        elif isinstance(parent, FigureBase):\n            self.isaxes = False\n            self.set_figure(parent)\n        else:\n            raise TypeError(\"Legend needs either Axes or Figure as parent\")\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/lib/matplotlib/legend.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/lib/matplotlib/legend.py:\n   432\t\n   433\t        if isinstance(parent, Axes):\n   434\t            self.isaxes = True\n   435\t            self.axes = parent\n   436\t            self.set_figure(parent.figure)\n   437\t        elif isinstance(parent, FigureBase):\n   438\t            self.isaxes = False\n   439\t            self.set_figure(parent)\n   440\t        else:\n   441\t            raise TypeError(\"Legend needs either Axes or Figure as parent\")\n   442\t        self.parent = parent\n   443\t\n   444\t        self._loc_used_default = loc is None\n   445\t        if loc is None:\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 30,
+        "thought": "",
+        "action": "timeout 90s python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\nMatplotlib version: 3.4.2.post1716+g64619e53e9.d20260106\nAttempting to add legend to subfigure...\nSuccessfully added legend to subfigure."
+    },
+    {
+        "step": 31,
+        "thought": "",
+        "action": "run_hunter_trace /testbed/reproduce_issue.py matplotlib/legend legend 5",
+        "observation": "OBSERVATION:\nThis report analyzes the execution flow of adding a legend to a Matplotlib `SubFigure` based on the provided trace logs.\n\n### 1. Initial Representation\n**Internal Representation:** A `matplotlib.figure.SubFigure` object containing one `AxesSubplot` which holds a single `Line2D` artist with the label `\"test\"`.\n\n### 2. Top-Level Call\nThe execution begins when `subfig.legend()` is called (which internally triggers the argument parsing and the instantiation of the `Legend` class).\n**Top-Level Entry:** `matplotlib.legend._parse_legend_args(axs=[AxesSubplot], ...)`\n\n### 3. Execution Tree\n```text\n(1) Dispatch: _parse_legend_args (legend.py:1155)\n│   ├── (2) Call: _get_legend_handles_labels (legend.py:1139)\n│   │   └── (3) Call: _get_legend_handles (legend.py:1105)\n│   │       ├── (4) Execute: Generator expression to find artists in Axes (legend.py:1114)\n│   │       │   └── Returns: <matplotlib.lines.Line2D object> (\"test\" line)\n│   │       ├── (5) Call: get_default_handler_map (legend.py:650)\n│   │       │   └── Returns: Dict mapping artist types to handlers (e.g., Line2D -> HandlerLine2D)\n│   │       ├── (6) Call: get_legend_handler (legend.py:685)\n│   │       │   └── Returns: <matplotlib.legend_handler.HandlerLine2D object>\n│   │       └── Returns: <matplotlib.lines.Line2D object>\n│   └── (7) Returns: ([Line2D], ['test'], (), {})\n│\n(8) Call: Legend.__init__ (legend.py:293)\n│   ├── (9) Call: set_bbox_to_anchor (legend.py:949)\n│   │   └── Returns: None\n│   ├── (10) Call: _set_artist_props (legend.py:555) \n│   │   └── Description: Sets properties for the legend's FancyBboxPatch (the frame)\n│   ├── (11) Call: _init_legend_box (legend.py:711)\n│   │   ├── (12) Call: get_legend_handler_map (legend.py:671)\n│   │   │   └── Returns: Handler Map Dictionary\n│   │   ├── (13) Call: get_legend_handler (legend.py:685)\n│   │   │   ├── Catch: KeyError (Internal lookup failure for specific instance)\n│   │   │   └── Returns: <matplotlib.legend_handler.HandlerLine2D object> (Default for type)\n│   │   └── (14) Call: HandlerLine2D.legend_artist (legend_handler.py:93)\n│   │       ├── (15) Call: adjust_drawing_area (legend_handler.py:84)\n│   │       ├── (16) Call: create_artists (legend_handler.py:303)\n│   │       │   └── Returns: <_Line2DHandleList object> (The mini-line inside the legend)\n│   │       └── Returns: <matplotlib.lines.Line2D object> (Visual artist for legend)\n│   ├── (17) Call: _set_loc (legend.py:566)\n│   │   └── Description: Places the legend at location \"1\" (upper right)\n│   └── (18) Call: set_title (legend.py:880)\n│       └── Returns: None\n│\n└── Final Output: <matplotlib.legend.Legend object> successfully attached to SubFigure.\n```\n\n### 4. Final Output\n**Final Output:** A fully initialized `matplotlib.legend.Legend` object containing one entry (\"test\") positioned within the `SubFigure`.\n\n### 5. Key Function Analysis\n\n*   **Function and Location:** `_parse_legend_args` (`matplotlib/legend.py:1155`)\n    *   **Functional Boundary:** Input normalization and discovery.\n    *   **Role in this Workflow:** It determines what handles (the graphics) and labels (the text) should be included in the legend by inspecting the provided axes if they weren't passed explicitly.\n*   **Function and Location:** `_get_legend_handles_labels` (`matplotlib/legend.py:1139`)\n    *   **Functional Boundary:** Data extraction.\n    *   **Role in this Workflow:** Specifically queries the subfigure's axes to find artists that have labels assigned to them (returning the `Line2D` object and the string `'test'`).\n*   **Function and Location:** `Legend.__init__` (`matplotlib/legend.py:293`)\n    *   **Functional Boundary:** Object construction and layout orchestration.\n    *   **Role in this Workflow:** The main constructor that coordinates the creation of the legend box, the styling of the frame, and the placement of the legend within the parent container (in this case, the `SubFigure`).\n*   **Function and Location:** `_init_legend_box` (`matplotlib/legend.py:711`)\n    *   **Functional Boundary:** UI Component Assembly.\n    *   **Role in this Workflow:** Iterates through the handles/labels and uses the `legend_handler` system to create the \"key\" (the small icons) and arrange them alongside the text labels.\n*   **Function and Location:** `legend_artist` (`matplotlib/legend_handler.py:93`)\n    *   **Functional Boundary:** Glyph Rendering.\n    *   **Role in this Workflow:** Responsible for creating the actual visual proxy (the small line segment) that appears inside the legend box to represent the larger `Line2D` on the plot.\n\n### 6. Workflow Introduction\nThe workflow demonstrates the automated discovery and rendering process of a legend within a Matplotlib `SubFigure`. When `subfig.legend()` is invoked, the system first performs **Discovery**, where it scans the axes within the subfigure to identify any artists with labels. Once the `Line2D` artist for \"test\" is located, the process shifts to **Object Construction**, initializing the `Legend` class. During this phase, the code employs a **Handler Mapping** system to match the data artist (`Line2D`) with a specific visual handler (`HandlerLine2D`). This handler triggers a **Graphic Synthesis** step (`legend_artist`) to create a miniature representation of the line. Finally, the legend computes its spatial layout and attaches itself to the `SubFigure` as a new artist."
+    },
+    {
+        "step": 32,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/test_edge_cases.py --file_text 'import matplotlib.pyplot as plt\nimport matplotlib.legend as mlegend\nfrom matplotlib.figure import Figure, FigureBase\n\ndef test_axes_legend():\n    print(\"Testing axes legend...\")\n    fig, ax = plt.subplots()\n    ax.plot([0, 1], [0, 1], label=\"axes\")\n    leg = ax.legend()\n    assert leg.parent == ax\n    assert leg.isaxes == True\n    print(\"Success\")\n\ndef test_figure_legend():\n    print(\"Testing figure legend...\")\n    fig, ax = plt.subplots()\n    ax.plot([0, 1], [0, 1], label=\"fig\")\n    leg = fig.legend()\n    assert leg.parent == fig\n    assert leg.isaxes == False\n    print(\"Success\")\n\ndef test_subfigure_legend():\n    print(\"Testing subfigure legend...\")\n    fig = plt.figure()\n    sfigs = fig.subfigures(1, 2)\n    sfigs[0].plot([0, 1], [0, 1], label=\"sfig0\")\n    leg0 = sfigs[0].legend()\n    assert leg0.parent == sfigs[0]\n    assert leg0.isaxes == False\n    \n    sfigs[1].plot([0, 1], [0, 1], label=\"sfig1\")\n    leg1 = sfigs[1].legend()\n    assert leg1.parent == sfigs[1]\n    assert leg1.isaxes == False\n    print(\"Success\")\n\ndef test_nested_subfigure_legend():\n    print(\"Testing nested subfigure legend...\")\n    fig = plt.figure()\n    sfigs = fig.subfigures(1, 2)\n    subsfigs = sfigs[0].subfigures(2, 1)\n    ax = subsfigs[0].subplots()\n    ax.plot([0, 1], [0, 1], label=\"nested\")\n    leg = subsfigs[0].legend()\n    assert leg.parent == subsfigs[0]\n    assert leg.isaxes == False\n    print(\"Success\")\n\nif __name__ == \"__main__\":\n    test_axes_legend()\n    test_figure_legend()\n    test_subfigure_legend()\n    test_nested_subfigure_legend()\n    print(\"All tests passed!\")\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_edge_cases.py"
+    },
+    {
+        "step": 33,
+        "thought": "",
+        "action": "timeout 90s python /testbed/test_edge_cases.py",
+        "observation": "OBSERVATION:\nTesting axes legend...\nSuccess\nTesting figure legend...\nSuccess\nTesting subfigure legend...\nTraceback (most recent call last):\n  File \"/testbed/test_edge_cases.py\", line 53, in <module>\n    test_subfigure_legend()\n  File \"/testbed/test_edge_cases.py\", line 27, in test_subfigure_legend\n    sfigs[0].plot([0, 1], [0, 1], label=\"sfig0\")\nAttributeError: 'SubFigure' object has no attribute 'plot'"
+    },
+    {
+        "step": 34,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/test_edge_cases.py   --old_str 'def test_subfigure_legend():\n    print(\"Testing subfigure legend...\")\n    fig = plt.figure()\n    sfigs = fig.subfigures(1, 2)\n    sfigs[0].plot([0, 1], [0, 1], label=\"sfig0\")\n    leg0 = sfigs[0].legend()\n    assert leg0.parent == sfigs[0]\n    assert leg0.isaxes == False\n    \n    sfigs[1].plot([0, 1], [0, 1], label=\"sfig1\")\n    leg1 = sfigs[1].legend()\n    assert leg1.parent == sfigs[1]\n    assert leg1.isaxes == False\n    print(\"Success\")\n' --new_str 'def test_subfigure_legend():\n    print(\"Testing subfigure legend...\")\n    fig = plt.figure()\n    sfigs = fig.subfigures(1, 2)\n    ax0 = sfigs[0].subplots()\n    ax0.plot([0, 1], [0, 1], label=\"sfig0\")\n    leg0 = sfigs[0].legend()\n    assert leg0.parent == sfigs[0]\n    assert leg0.isaxes == False\n    \n    ax1 = sfigs[1].subplots()\n    ax1.plot([0, 1], [0, 1], label=\"sfig1\")\n    leg1 = sfigs[1].legend()\n    assert leg1.parent == sfigs[1]\n    assert leg1.isaxes == False\n    print(\"Success\")\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/test_edge_cases.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test_edge_cases.py:\n    18\t    leg = fig.legend()\n    19\t    assert leg.parent == fig\n    20\t    assert leg.isaxes == False\n    21\t    print(\"Success\")\n    22\t\n    23\tdef test_subfigure_legend():\n    24\t    print(\"Testing subfigure legend...\")\n    25\t    fig = plt.figure()\n    26\t    sfigs = fig.subfigures(1, 2)\n    27\t    ax0 = sfigs[0].subplots()\n    28\t    ax0.plot([0, 1], [0, 1], label=\"sfig0\")\n    29\t    leg0 = sfigs[0].legend()\n    30\t    assert leg0.parent == sfigs[0]\n    31\t    assert leg0.isaxes == False\n    32\t    \n    33\t    ax1 = sfigs[1].subplots()\n    34\t    ax1.plot([0, 1], [0, 1], label=\"sfig1\")\n    35\t    leg1 = sfigs[1].legend()\n    36\t    assert leg1.parent == sfigs[1]\n    37\t    assert leg1.isaxes == False\n    38\t    print(\"Success\")\n    39\t\n    40\tdef test_nested_subfigure_legend():\n    41\t    print(\"Testing nested subfigure legend...\")\n    42\t    fig = plt.figure()\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 35,
+        "thought": "",
+        "action": "timeout 90s python /testbed/test_edge_cases.py",
+        "observation": "OBSERVATION:\nTesting axes legend...\nSuccess\nTesting figure legend...\nSuccess\nTesting subfigure legend...\nSuccess\nTesting nested subfigure legend...\nSuccess\nAll tests passed!"
+    },
+    {
+        "step": 36,
+        "thought": "",
+        "action": "python -c \"import matplotlib.legend as mlegend; mlegend.Legend('not-an-axes-or-figure', [], [])\"",
+        "observation": "OBSERVATION:\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/testbed/lib/matplotlib/legend.py\", line 441, in __init__\n    raise TypeError(\"Legend needs either Axes or Figure as parent\")\nTypeError: Legend needs either Axes or Figure as parent"
+    },
+    {
+        "step": 37,
+        "thought": "",
+        "action": "grep \"isinstance(.*, Figure)\" /testbed/lib/matplotlib/legend.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 38,
+        "thought": "",
+        "action": "grep -n \"Figure\" /testbed/lib/matplotlib/legend.py | head -n 20",
+        "observation": "OBSERVATION:\n144:    `figure.bbox` (if `.Figure.legend`).  This argument allows arbitrary\n149:    Axes or Figure coordinates, depending on which ``legend`` is called.\n335:        parent : `~matplotlib.axes.Axes` or `.Figure`\n363:        from matplotlib.figure import Figure, FigureBase\n437:        elif isinstance(parent, FigureBase):\n441:            raise TypeError(\"Legend needs either Axes or Figure as parent\")"
+    },
+    {
+        "step": 39,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/legend.py  --view_range 330 340",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/legend.py:\n   330\t        title_fontproperties=None,  # properties for the legend title\n   331\t    ):\n   332\t        \"\"\"\n   333\t        Parameters\n   334\t        ----------\n   335\t        parent : `~matplotlib.axes.Axes` or `.Figure`\n   336\t            The artist that contains the legend.\n   337\t\n   338\t        handles : list of `.Artist`\n   339\t            A list of Artists (lines, patches) to be added to the legend.\n   340"
+    },
+    {
+        "step": 40,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/lib/matplotlib/legend.py   --old_str '        parent : `~matplotlib.axes.Axes` or `.Figure`' --new_str '        parent : `~matplotlib.axes.Axes` or `~matplotlib.figure.Figure` or `~matplotlib.figure.SubFigure`'",
+        "observation": "OBSERVATION:\nThe file /testbed/lib/matplotlib/legend.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/lib/matplotlib/legend.py:\n   330\t        title_fontproperties=None,  # properties for the legend title\n   331\t    ):\n   332\t        \"\"\"\n   333\t        Parameters\n   334\t        ----------\n   335\t        parent : `~matplotlib.axes.Axes` or `~matplotlib.figure.Figure` or `~matplotlib.figure.SubFigure`\n   336\t            The artist that contains the legend.\n   337\t\n   338\t        handles : list of `.Artist`\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 41,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/lib/matplotlib/legend.py   --old_str '        else:\n            raise TypeError(\"Legend needs either Axes or Figure as parent\")\n' --new_str '        else:\n            raise TypeError(\"Legend needs either Axes, Figure or SubFigure \"\n                            \"as parent\")\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/lib/matplotlib/legend.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/lib/matplotlib/legend.py:\n   435\t            self.axes = parent\n   436\t            self.set_figure(parent.figure)\n   437\t        elif isinstance(parent, FigureBase):\n   438\t            self.isaxes = False\n   439\t            self.set_figure(parent)\n   440\t        else:\n   441\t            raise TypeError(\"Legend needs either Axes, Figure or SubFigure \"\n   442\t                            \"as parent\")\n   443\t        self.parent = parent\n   444\t\n   445\t        self._loc_used_default = loc is None\n   446\t        if loc is None:\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 42,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/legend.py  --view_range 1100 1125",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/legend.py:\n  1100\t        \"\"\"Return ``True`` if the legend is draggable, ``False`` otherwise.\"\"\"\n  1101\t        return self._draggable is not None\n  1102\t\n  1103\t\n  1104\t# Helper functions to parse legend arguments for both `figure.legend` and\n  1105\t# `axes.legend`:\n  1106\tdef _get_legend_handles(axs, legend_handler_map=None):\n  1107\t    \"\"\"\n  1108\t    Return a generator of artists that can be used as handles in\n  1109\t    a legend.\n  1110\t\n  1111\t    \"\"\"\n  1112\t    handles_original = []\n  1113\t    for ax in axs:\n  1114\t        handles_original += [\n  1115\t            *(a for a in ax._children\n  1116\t              if isinstance(a, (Line2D, Patch, Collection))),\n  1117\t            *ax.containers]\n  1118\t        # support parasite axes:\n  1119\t        if hasattr(ax, 'parasites'):\n  1120\t            for axx in ax.parasites:\n  1121\t                handles_original += [\n  1122\t                    *(a for a in axx._children\n  1123\t                      if isinstance(a, (Line2D, Patch, Collection))),\n  1124\t                    *axx.containers]\n  1125"
+    },
+    {
+        "step": 43,
+        "thought": "",
+        "action": "grep \"FigureBase\" /testbed/lib/matplotlib/legend.py",
+        "observation": "OBSERVATION:\n        from matplotlib.figure import Figure, FigureBase\n        elif isinstance(parent, FigureBase):"
+    },
+    {
+        "step": 44,
+        "thought": "",
+        "action": "head -n 50 /testbed/lib/matplotlib/legend.py | grep \"from .* import\"",
+        "observation": "OBSERVATION:\nfrom matplotlib import _api, docstring, colors, offsetbox\nfrom matplotlib.artist import Artist, allow_rasterization\nfrom matplotlib.cbook import silent_list\nfrom matplotlib.font_manager import FontProperties\nfrom matplotlib.lines import Line2D\nfrom matplotlib.patches import (Patch, Rectangle, Shadow, FancyBboxPatch,\nfrom matplotlib.collections import (\nfrom matplotlib.transforms import Bbox, BboxBase, TransformedBbox\nfrom matplotlib.transforms import BboxTransformTo, BboxTransformFrom\nfrom matplotlib.offsetbox import (\nfrom matplotlib.container import ErrorbarContainer, BarContainer, StemContainer\nfrom . import legend_handler"
+    },
+    {
+        "step": 45,
+        "thought": "",
+        "action": "cat /testbed/lib/matplotlib/legend.py | grep -C 5 \"isinstance(parent, FigureBase)\"",
+        "observation": "OBSERVATION:\n\n        if isinstance(parent, Axes):\n            self.isaxes = True\n            self.axes = parent\n            self.set_figure(parent.figure)\n        elif isinstance(parent, FigureBase):\n            self.isaxes = False\n            self.set_figure(parent)\n        else:\n            raise TypeError(\"Legend needs either Axes, Figure or SubFigure \"\n                            \"as parent\")"
+    },
+    {
+        "step": 46,
+        "thought": "",
+        "action": "cat /testbed/lib/matplotlib/legend.py | grep -C 5 \"from matplotlib.figure import Figure, FigureBase\"",
+        "observation": "OBSERVATION:\n        2 floats, which is interpreted as the lower-left corner of the legend\n        in the normalized axes coordinate.\n        \"\"\"\n        # local import only to avoid circularity\n        from matplotlib.axes import Axes\n        from matplotlib.figure import Figure, FigureBase\n\n        super().__init__()\n\n        if prop is None:\n            if fontsize is not None:"
+    },
+    {
+        "step": 47,
+        "thought": "",
+        "action": "cat /testbed/lib/matplotlib/legend.py | grep -C 5 \"parent : \\`~matplotlib.axes.Axes\\` or \\`~matplotlib.figure.Figure\\`\"",
+        "observation": "OBSERVATION:\n        title_fontproperties=None,  # properties for the legend title\n    ):\n        \"\"\"\n        Parameters\n        ----------\n        parent : `~matplotlib.axes.Axes` or `~matplotlib.figure.Figure` or `~matplotlib.figure.SubFigure`\n            The artist that contains the legend.\n\n        handles : list of `.Artist`\n            A list of Artists (lines, patches) to be added to the legend."
+    },
+    {
+        "step": 48,
+        "thought": "",
+        "action": "grep \"isinstance(.*, Figure)\" /testbed/lib/matplotlib/legend.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 49,
+        "thought": "",
+        "action": "grep \"isinstance(.*, SubFigure)\" /testbed/lib/matplotlib/legend.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 50,
+        "thought": "",
+        "action": "grep \"type(.*) is Figure\" /testbed/lib/matplotlib/legend.py\ngrep \"type(.*) == Figure\" /testbed/lib/matplotlib/legend.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 51,
+        "thought": "",
+        "action": "grep -n \"def subfigures\" /testbed/lib/matplotlib/figure.py",
+        "observation": "OBSERVATION:\n1393:    def subfigures(self, nrows=1, ncols=1, squeeze=True,"
+    },
+    {
+        "step": 52,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\nThank you for your work on this issue. Please carefully follow the steps below to help review your changes.\n\n1. If you made any changes to your code after running the reproduction script, please run the reproduction script again.\n  If the reproduction script is failing, please revisit your changes and make sure they are correct.\n  If you have already removed your reproduction script, please ignore this step.\n2. Remove your reproduction script (if you haven't done so already).\n3. If you have modified any TEST files, please revert them to the state they had before you started fixing the issue.\n  You can do this with `git checkout -- /path/to/test/file.py`. Use below <diff> to find the files you need to revert.\n4. Run the submit command again to confirm.\n\nHere is a list of all of your changes:\n\n<diff>\ndiff --git a/lib/matplotlib/legend.py b/lib/matplotlib/legend.py\nindex 44ab024698..6dcde1de12 100644\n--- a/lib/matplotlib/legend.py\n+++ b/lib/matplotlib/legend.py\n@@ -332,7 +332,7 @@ class Legend(Artist):\n         \"\"\"\n         Parameters\n         ----------\n-        parent : `~matplotlib.axes.Axes` or `.Figure`\n+        parent : `~matplotlib.axes.Axes` or `~matplotlib.figure.Figure` or `~matplotlib.figure.SubFigure`\n             The artist that contains the legend.\n \n         handles : list of `.Artist`\n@@ -360,7 +360,7 @@ class Legend(Artist):\n         \"\"\"\n         # local import only to avoid circularity\n         from matplotlib.axes import Axes\n-        from matplotlib.figure import Figure\n+        from matplotlib.figure import Figure, FigureBase\n \n         super().__init__()\n \n@@ -434,11 +434,12 @@ class Legend(Artist):\n             self.isaxes = True\n             self.axes = parent\n             self.set_figure(parent.figure)\n-        elif isinstance(parent, Figure):\n+        elif isinstance(parent, FigureBase):\n             self.isaxes = False\n             self.set_figure(parent)\n         else:\n-            raise TypeError(\"Legend needs either Axes or Figure as parent\")\n+            raise TypeError(\"Legend needs either Axes, Figure or SubFigure \"\n+                            \"as parent\")\n         self.parent = parent\n \n         self._loc_used_default = loc is None\ndiff --git a/reproduce_issue.py b/reproduce_issue.py\nnew file mode 100644\nindex 0000000000..6394d3d8bf\n--- /dev/null\n+++ b/reproduce_issue.py\n@@ -0,0 +1,24 @@\n+import matplotlib.pyplot as plt\n+import matplotlib\n+print(f\"Matplotlib version: {matplotlib.__version__}\")\n+\n+try:\n+    fig = plt.figure()\n+    subfigs = fig.subfigures()\n+    # fig.subfigures() can return a single SubFigure or an array of them.\n+    # In the PR description, it seems it's treated as a single SubFigure.\n+    # Actually, fig.subfigures() returns a SubFigure or list of SubFigures depending on arguments.\n+    # By default fig.subfigures() returns a single SubFigure if no nrows/ncols are given? \n+    # Wait, looking at the docs or common usage:\n+    # subfigs = fig.subfigures(2, 1) returns a list.\n+    # Let's check what fig.subfigures() does.\n+    \n+    subfig = fig.subfigures()\n+    ax = subfig.subplots()\n+    ax.plot([0, 1, 2], [0, 1, 2], label=\"test\")\n+    print(\"Attempting to add legend to subfigure...\")\n+    subfig.legend()\n+    print(\"Successfully added legend to subfigure.\")\n+except Exception as e:\n+    import traceback\n+    traceback.print_exc()\ndiff --git a/test_edge_cases.py b/test_edge_cases.py\nnew file mode 100644\nindex 0000000000..c3f671309d\n--- /dev/null\n+++ b/test_edge_cases.py\n@@ -0,0 +1,57 @@\n+import matplotlib.pyplot as plt\n+import matplotlib.legend as mlegend\n+from matplotlib.figure import Figure, FigureBase\n+\n+def test_axes_legend():\n+    print(\"Testing axes legend...\")\n+    fig, ax = plt.subplots()\n+    ax.plot([0, 1], [0, 1], label=\"axes\")\n+    leg = ax.legend()\n+    assert leg.parent == ax\n+    assert leg.isaxes == True\n+    print(\"Success\")\n+\n+def test_figure_legend():\n+    print(\"Testing figure legend...\")\n+    fig, ax = plt.subplots()\n+    ax.plot([0, 1], [0, 1], label=\"fig\")\n+    leg = fig.legend()\n+    assert leg.parent == fig\n+    assert leg.isaxes == False\n+    print(\"Success\")\n+\n+def test_subfigure_legend():\n+    print(\"Testing subfigure legend...\")\n+    fig = plt.figure()\n+    sfigs = fig.subfigures(1, 2)\n+    ax0 = sfigs[0].subplots()\n+    ax0.plot([0, 1], [0, 1], label=\"sfig0\")\n+    leg0 = sfigs[0].legend()\n+    assert leg0.parent == sfigs[0]\n+    assert leg0.isaxes == False\n+    \n+    ax1 = sfigs[1].subplots()\n+    ax1.plot([0, 1], [0, 1], label=\"sfig1\")\n+    leg1 = sfigs[1].legend()\n+    assert leg1.parent == sfigs[1]\n+    assert leg1.isaxes == False\n+    print(\"Success\")\n+\n+def test_nested_subfigure_legend():\n+    print(\"Testing nested subfigure legend...\")\n+    fig = plt.figure()\n+    sfigs = fig.subfigures(1, 2)\n+    subsfigs = sfigs[0].subfigures(2, 1)\n+    ax = subsfigs[0].subplots()\n+    ax.plot([0, 1], [0, 1], label=\"nested\")\n+    leg = subsfigs[0].legend()\n+    assert leg.parent == subsfigs[0]\n+    assert leg.isaxes == False\n+    print(\"Success\")\n+\n+if __name__ == \"__main__\":\n+    test_axes_legend()\n+    test_figure_legend()\n+    test_subfigure_legend()\n+    test_nested_subfigure_legend()\n+    print(\"All tests passed!\")\n\n</diff>"
+    },
+    {
+        "step": 53,
+        "thought": "",
+        "action": "rm /testbed/reproduce_issue.py /testbed/test_edge_cases.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 54,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\ndiff --git a/lib/matplotlib/legend.py b/lib/matplotlib/legend.py\nindex 44ab024698..6dcde1de12 100644\n--- a/lib/matplotlib/legend.py\n+++ b/lib/matplotlib/legend.py\n@@ -332,7 +332,7 @@ class Legend(Artist):\n         \"\"\"\n         Parameters\n         ----------\n-        parent : `~matplotlib.axes.Axes` or `.Figure`\n+        parent : `~matplotlib.axes.Axes` or `~matplotlib.figure.Figure` or `~matplotlib.figure.SubFigure`\n             The artist that contains the legend.\n \n         handles : list of `.Artist`\n@@ -360,7 +360,7 @@ class Legend(Artist):\n         \"\"\"\n         # local import only to avoid circularity\n         from matplotlib.axes import Axes\n-        from matplotlib.figure import Figure\n+        from matplotlib.figure import Figure, FigureBase\n \n         super().__init__()\n \n@@ -434,11 +434,12 @@ class Legend(Artist):\n             self.isaxes = True\n             self.axes = parent\n             self.set_figure(parent.figure)\n-        elif isinstance(parent, Figure):\n+        elif isinstance(parent, FigureBase):\n             self.isaxes = False\n             self.set_figure(parent)\n         else:\n-            raise TypeError(\"Legend needs either Axes or Figure as parent\")\n+            raise TypeError(\"Legend needs either Axes, Figure or SubFigure \"\n+                            \"as parent\")\n         self.parent = parent\n \n         self._loc_used_default = loc is None"
+    }
+]

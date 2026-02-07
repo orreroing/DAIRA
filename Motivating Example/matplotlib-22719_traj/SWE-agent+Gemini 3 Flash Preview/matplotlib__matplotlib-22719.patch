@@ -1,0 +1,80 @@
+diff --git a/django/db/migrations/serializer.py b/django/db/migrations/serializer.py
+index 7d226955d5..5898ba35fa 100644
+--- a/django/db/migrations/serializer.py
++++ b/django/db/migrations/serializer.py
+@@ -2,6 +2,8 @@ import builtins
+ import collections.abc
+ import datetime
+ import decimal
++from importlib import import_module
++
+ import enum
+ import functools
+ import math
+@@ -97,6 +99,17 @@ class DeconstructableSerializer(BaseSerializer):
+         else:
+             imports = {"import %s" % module}
+             name = path
++            # Try to find the actual module part of the path
++            parts = path.split('.')
++            for i in range(len(parts) - 1, 0, -1):
++                module_name = ".".join(parts[:i])
++                try:
++                    import_module(module_name)
++                except ImportError:
++                    continue
++                else:
++                    imports = {"import %s" % module_name}
++                    break
+         return name, imports
+ 
+     def serialize(self):
+@@ -143,7 +156,7 @@ class FunctionTypeSerializer(BaseSerializer):
+         if getattr(self.value, "__self__", None) and isinstance(self.value.__self__, type):
+             klass = self.value.__self__
+             module = klass.__module__
+-            return "%s.%s.%s" % (module, klass.__name__, self.value.__name__), {"import %s" % module}
++            return "%s.%s.%s" % (module, klass.__qualname__, self.value.__name__), {"import %s" % module}
+         # Further error checking
+         if self.value.__name__ == '<lambda>':
+             raise ValueError("Cannot serialize function: lambda")
+@@ -269,7 +282,10 @@ class TypeSerializer(BaseSerializer):
+             if module == builtins.__name__:
+                 return self.value.__name__, set()
+             else:
+-                return "%s.%s" % (module, self.value.__name__), {"import %s" % module}
++                if '<' in self.value.__qualname__:
++                    return "%s.%s" % (module, self.value.__name__), {"import %s" % module}
++                else:
++                    return "%s.%s" % (module, self.value.__qualname__), {"import %s" % module}
+ 
+ 
+ class UUIDSerializer(BaseSerializer):
+diff --git a/django/utils/deconstruct.py b/django/utils/deconstruct.py
+index aa952f6b73..b0ce2645cd 100644
+--- a/django/utils/deconstruct.py
++++ b/django/utils/deconstruct.py
+@@ -27,15 +27,17 @@ def deconstructible(*args, path=None):
+                 module_name, _, name = path.rpartition('.')
+             else:
+                 module_name = obj.__module__
+-                name = obj.__class__.__name__
+-            # Make sure it's actually there and not an inner class
++                name = obj.__class__.__qualname__
++            # Make sure it's actually there
+             module = import_module(module_name)
+-            if not hasattr(module, name):
++            ptr = module
++            for part in name.split('.'):
++                ptr = getattr(ptr, part, None)
++                if ptr is None:
++                    break
++            if ptr is None:
+                 raise ValueError(
+                     "Could not find object %s in %s.\n"
+-                    "Please note that you cannot serialize things like inner "
+-                    "classes. Please move the object into the main module "
+-                    "body to use migrations.\n"
+                     "For more information, see "
+                     "https://docs.djangoproject.com/en/%s/topics/migrations/#serializing-values"
+                     % (name, module_name, get_docs_version()))

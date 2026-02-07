@@ -1,0 +1,266 @@
+[
+    {
+        "step": 1,
+        "thought": "",
+        "action": "str_replace_editor view /testbed",
+        "observation": "OBSERVATION:\nHere's the files and directories up to 2 levels deep in /testbed, excluding hidden items:\n/testbed\n/testbed/LICENSE\n/testbed/LICENSE/LICENSE\n/testbed/LICENSE/LICENSE_QHULL\n/testbed/LICENSE/LICENSE_BAKOMA\n/testbed/LICENSE/LICENSE_SOLARIZED\n/testbed/LICENSE/LICENSE_CARLOGO\n/testbed/LICENSE/LICENSE_JSXTOOLS_RESIZE_OBSERVER\n/testbed/LICENSE/LICENSE_YORICK\n/testbed/LICENSE/LICENSE_STIX\n/testbed/LICENSE/LICENSE_COLORBREWER\n/testbed/LICENSE/LICENSE_AMSFONTS\n/testbed/LICENSE/LICENSE_COURIERTEN\n/testbed/LICENSE/LICENSE_QT4_EDITOR\n/testbed/pyproject.toml\n/testbed/setup.py\n/testbed/azure-pipelines.yml\n/testbed/tmp\n/testbed/tmp/tmpa_4h6sb7.o\n/testbed/tmp/tmp6dtp2xd3.o\n/testbed/tmp/tmpuk0s1nz1.o\n/testbed/lib\n/testbed/lib/pylab.py\n/testbed/lib/matplotlib.egg-info\n/testbed/lib/matplotlib\n/testbed/lib/mpl_toolkits\n/testbed/INSTALL.rst\n/testbed/tools\n/testbed/tools/subset.py\n/testbed/tools/embed_js.py\n/testbed/tools/run_examples.py\n/testbed/tools/github_stats.py\n/testbed/tools/visualize_tests.py\n/testbed/tools/create_DejaVuDisplay.sh\n/testbed/tools/README.txt\n/testbed/tools/make_icons.py\n/testbed/tools/cache_zenodo_svg.py\n/testbed/tools/memleak.py\n/testbed/tools/triage_tests.py\n/testbed/tools/gh_api.py\n/testbed/tools/boilerplate.py\n/testbed/pytest.ini\n/testbed/tox.ini\n/testbed/requirements\n/testbed/requirements/dev\n/testbed/requirements/testing\n/testbed/requirements/doc\n/testbed/CODE_OF_CONDUCT.md\n/testbed/src\n/testbed/src/array.h\n/testbed/src/_ttconv.cpp\n/testbed/src/_tkagg.cpp\n/testbed/src/_backend_agg.h\n/testbed/src/numpy_cpp.h\n/testbed/src/tri\n/testbed/src/py_converters.cpp\n/testbed/src/path_converters.h\n/testbed/src/ft2font.cpp\n/testbed/src/_path_wrapper.cpp\n/testbed/src/mplutils.h\n/testbed/src/checkdep_freetype2.c\n/testbed/src/_image_wrapper.cpp\n/testbed/src/_macosx.m\n/testbed/src/ft2font.h\n/testbed/src/_backend_agg_basic_types.h\n/testbed/src/ft2font_wrapper.cpp\n/testbed/src/_image_resample.h\n/testbed/src/_backend_agg.cpp\n/testbed/src/doc\n/testbed/src/_qhull_wrapper.cpp\n/testbed/src/_tkmini.h\n/testbed/src/py_exceptions.h\n/testbed/src/_path.h\n/testbed/src/_backend_agg_wrapper.cpp\n/testbed/src/_c_internal_utils.c\n/testbed/src/py_adaptors.h\n/testbed/src/py_converters.h\n/testbed/src/agg_workaround.h\n/testbed/doc\n/testbed/doc/missing-references.json\n/testbed/doc/devel\n/testbed/doc/matplotlibrc\n/testbed/doc/sphinxext\n/testbed/doc/docutils.conf\n/testbed/doc/_static\n/testbed/doc/_templates\n/testbed/doc/api\n/testbed/doc/make.bat\n/testbed/doc/index.rst\n/testbed/doc/Makefile\n/testbed/doc/users\n/testbed/doc/README.txt\n/testbed/doc/conf.py\n/testbed/doc/thirdpartypackages\n/testbed/setupext.py\n/testbed/setup.cfg\n/testbed/galleries\n/testbed/galleries/plot_types\n/testbed/galleries/examples\n/testbed/galleries/tutorials\n/testbed/extern\n/testbed/extern/agg24-svn\n/testbed/extern/ttconv\n/testbed/SECURITY.md\n/testbed/mplsetup.cfg.template\n/testbed/__pycache__\n/testbed/__pycache__/setupext.cpython-311.pyc\n/testbed/README.md\n/testbed/build\n/testbed/build/freetype-2.6.1\n/testbed/build/qhull-2020.2\n/testbed/CITATION.bib\n/testbed/ci\n/testbed/ci/codespell-ignore-words.txt\n/testbed/ci/check_wheel_licenses.py\n/testbed/ci/silence\n/testbed/ci/check_version_number.py\n/testbed/environment.yml"
+    },
+    {
+        "step": 2,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/repro.py --file_text 'import matplotlib.pyplot as plt\nimport pickle\n\nfig = plt.figure()\nax = fig.add_subplot(111)\n\ntime=[0,1,2,3,4]\nspeed=[40,43,45,47,48]\n\nax.plot(time,speed,label=\"speed\")\n\nleg=ax.legend()\nleg.set_draggable(True) #pickling works after removing this line \n\ntry:\n    pickle.dumps(fig)\n    print(\"Pickling successful\")\nexcept Exception as e:\n    print(f\"Pickling failed: {e}\")\n    import traceback\n    traceback.print_exc()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/repro.py"
+    },
+    {
+        "step": 3,
+        "thought": "",
+        "action": "python /testbed/repro.py",
+        "observation": "OBSERVATION:\nMatplotlib is building the font cache; this may take a moment.\nPickling successful"
+    },
+    {
+        "step": 4,
+        "thought": "",
+        "action": "python -c \"import matplotlib; print(matplotlib.get_backend())\"",
+        "observation": "OBSERVATION:\nagg"
+    },
+    {
+        "step": 5,
+        "thought": "",
+        "action": "grep -r \"def set_draggable\" /testbed/lib/matplotlib",
+        "observation": "OBSERVATION:\n/testbed/lib/matplotlib/legend.py:    def set_draggable(self, state, use_blit=False, update='loc'):"
+    },
+    {
+        "step": 6,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/legend.py  --view_range 1190 1230",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/legend.py:\n  1190\t        Returns\n  1191\t        -------\n  1192\t        `.DraggableLegend` or *None*\n  1193\t            If *state* is ``True`` this returns the `.DraggableLegend` helper\n  1194\t            instance. Otherwise this returns *None*.\n  1195\t        \"\"\"\n  1196\t        if state:\n  1197\t            if self._draggable is None:\n  1198\t                self._draggable = DraggableLegend(self,\n  1199\t                                                  use_blit,\n  1200\t                                                  update=update)\n  1201\t        else:\n  1202\t            if self._draggable is not None:\n  1203\t                self._draggable.disconnect()\n  1204\t            self._draggable = None\n  1205\t        return self._draggable\n  1206\t\n  1207\t    def get_draggable(self):\n  1208\t        \"\"\"Return ``True`` if the legend is draggable, ``False`` otherwise.\"\"\"\n  1209\t        return self._draggable is not None\n  1210\t\n  1211\t\n  1212\t# Helper functions to parse legend arguments for both `figure.legend` and\n  1213\t# `axes.legend`:\n  1214\tdef _get_legend_handles(axs, legend_handler_map=None):\n  1215\t    \"\"\"Yield artists that can be used as handles in a legend.\"\"\"\n  1216\t    handles_original = []\n  1217\t    for ax in axs:\n  1218\t        handles_original += [\n  1219\t            *(a for a in ax._children\n  1220\t              if isinstance(a, (Line2D, Patch, Collection, Text))),\n  1221\t            *ax.containers]\n  1222\t        # support parasite axes:\n  1223\t        if hasattr(ax, 'parasites'):\n  1224\t            for axx in ax.parasites:\n  1225\t                handles_original += [\n  1226\t                    *(a for a in axx._children\n  1227\t                      if isinstance(a, (Line2D, Patch, Collection, Text))),\n  1228\t                    *axx.containers]\n  1229\t\n  1230\t    handler_map = {**Legend.get_default_handler_map(),"
+    },
+    {
+        "step": 7,
+        "thought": "",
+        "action": "grep -n \"class DraggableLegend\" /testbed/lib/matplotlib/legend.py",
+        "observation": "OBSERVATION:\n53:class DraggableLegend(DraggableOffsetBox):"
+    },
+    {
+        "step": 8,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/legend.py  --view_range 1 100",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/legend.py:\n     1\t\"\"\"\n     2\tThe legend module defines the Legend class, which is responsible for\n     3\tdrawing legends associated with axes and/or figures.\n     4\t\n     5\t.. important::\n     6\t\n     7\t    It is unlikely that you would ever create a Legend instance manually.\n     8\t    Most users would normally create a legend via the `~.Axes.legend`\n     9\t    function. For more details on legends there is also a :doc:`legend guide\n    10\t    </tutorials/intermediate/legend_guide>`.\n    11\t\n    12\tThe `Legend` class is a container of legend handles and legend texts.\n    13\t\n    14\tThe legend handler map specifies how to create legend handles from artists\n    15\t(lines, patches, etc.) in the axes or figures. Default legend handlers are\n    16\tdefined in the :mod:`~matplotlib.legend_handler` module. While not all artist\n    17\ttypes are covered by the default legend handlers, custom legend handlers can be\n    18\tdefined to support arbitrary objects.\n    19\t\n    20\tSee the :doc:`legend guide </tutorials/intermediate/legend_guide>` for more\n    21\tinformation.\n    22\t\"\"\"\n    23\t\n    24\timport itertools\n    25\timport logging\n    26\timport time\n    27\t\n    28\timport numpy as np\n    29\t\n    30\timport matplotlib as mpl\n    31\tfrom matplotlib import _api, _docstring, colors, offsetbox\n    32\tfrom matplotlib.artist import Artist, allow_rasterization\n    33\tfrom matplotlib.cbook import silent_list\n    34\tfrom matplotlib.font_manager import FontProperties\n    35\tfrom matplotlib.lines import Line2D\n    36\tfrom matplotlib.patches import (Patch, Rectangle, Shadow, FancyBboxPatch,\n    37\t                                StepPatch)\n    38\tfrom matplotlib.collections import (\n    39\t    Collection, CircleCollection, LineCollection, PathCollection,\n    40\t    PolyCollection, RegularPolyCollection)\n    41\tfrom matplotlib.text import Text\n    42\tfrom matplotlib.transforms import Bbox, BboxBase, TransformedBbox\n    43\tfrom matplotlib.transforms import BboxTransformTo, BboxTransformFrom\n    44\tfrom matplotlib.offsetbox import (\n    45\t    AnchoredOffsetbox, DraggableOffsetBox,\n    46\t    HPacker, VPacker,\n    47\t    DrawingArea, TextArea,\n    48\t)\n    49\tfrom matplotlib.container import ErrorbarContainer, BarContainer, StemContainer\n    50\tfrom . import legend_handler\n    51\t\n    52\t\n    53\tclass DraggableLegend(DraggableOffsetBox):\n    54\t    def __init__(self, legend, use_blit=False, update=\"loc\"):\n    55\t        \"\"\"\n    56\t        Wrapper around a `.Legend` to support mouse dragging.\n    57\t\n    58\t        Parameters\n    59\t        ----------\n    60\t        legend : `.Legend`\n    61\t            The `.Legend` instance to wrap.\n    62\t        use_blit : bool, optional\n    63\t            Use blitting for faster image composition. For details see\n    64\t            :ref:`func-animation`.\n    65\t        update : {'loc', 'bbox'}, optional\n    66\t            If \"loc\", update the *loc* parameter of the legend upon finalizing.\n    67\t            If \"bbox\", update the *bbox_to_anchor* parameter.\n    68\t        \"\"\"\n    69\t        self.legend = legend\n    70\t\n    71\t        _api.check_in_list([\"loc\", \"bbox\"], update=update)\n    72\t        self._update = update\n    73\t\n    74\t        super().__init__(legend, legend._legend_box, use_blit=use_blit)\n    75\t\n    76\t    def finalize_offset(self):\n    77\t        if self._update == \"loc\":\n    78\t            self._update_loc(self.get_loc_in_canvas())\n    79\t        elif self._update == \"bbox\":\n    80\t            self._bbox_to_anchor(self.get_loc_in_canvas())\n    81\t\n    82\t    def _update_loc(self, loc_in_canvas):\n    83\t        bbox = self.legend.get_bbox_to_anchor()\n    84\t        # if bbox has zero width or height, the transformation is\n    85\t        # ill-defined. Fall back to the default bbox_to_anchor.\n    86\t        if bbox.width == 0 or bbox.height == 0:\n    87\t            self.legend.set_bbox_to_anchor(None)\n    88\t            bbox = self.legend.get_bbox_to_anchor()\n    89\t        _bbox_transform = BboxTransformFrom(bbox)\n    90\t        self.legend._loc = tuple(_bbox_transform.transform(loc_in_canvas))\n    91\t\n    92\t    def _update_bbox_to_anchor(self, loc_in_canvas):\n    93\t        loc_in_bbox = self.legend.axes.transAxes.transform(loc_in_canvas)\n    94\t        self.legend.set_bbox_to_anchor(loc_in_bbox)\n    95\t\n    96\t\n    97\t_legend_kw_doc_base = \"\"\"\n    98\tbbox_to_anchor : `.BboxBase`, 2-tuple, or 4-tuple of floats\n    99\t    Box that is used to position the legend in conjunction with *loc*.\n   100\t    Defaults to `axes.bbox` (if called as a method to `.Axes.legend`) or"
+    },
+    {
+        "step": 9,
+        "thought": "",
+        "action": "grep -n \"class DraggableOffsetBox\" /testbed/lib/matplotlib/offsetbox.py",
+        "observation": "OBSERVATION:\n1584:class DraggableOffsetBox(DraggableBase):"
+    },
+    {
+        "step": 10,
+        "thought": "",
+        "action": "grep -n \"class DraggableBase\" /testbed/lib/matplotlib/offsetbox.py",
+        "observation": "OBSERVATION:\n1474:class DraggableBase:"
+    },
+    {
+        "step": 11,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/offsetbox.py  --view_range 1474 1550",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/offsetbox.py:\n  1474\tclass DraggableBase:\n  1475\t    \"\"\"\n  1476\t    Helper base class for a draggable artist (legend, offsetbox).\n  1477\t\n  1478\t    Derived classes must override the following methods::\n  1479\t\n  1480\t        def save_offset(self):\n  1481\t            '''\n  1482\t            Called when the object is picked for dragging; should save the\n  1483\t            reference position of the artist.\n  1484\t            '''\n  1485\t\n  1486\t        def update_offset(self, dx, dy):\n  1487\t            '''\n  1488\t            Called during the dragging; (*dx*, *dy*) is the pixel offset from\n  1489\t            the point where the mouse drag started.\n  1490\t            '''\n  1491\t\n  1492\t    Optionally, you may override the following method::\n  1493\t\n  1494\t        def finalize_offset(self):\n  1495\t            '''Called when the mouse is released.'''\n  1496\t\n  1497\t    In the current implementation of `.DraggableLegend` and\n  1498\t    `DraggableAnnotation`, `update_offset` places the artists in display\n  1499\t    coordinates, and `finalize_offset` recalculates their position in axes\n  1500\t    coordinate and set a relevant attribute.\n  1501\t    \"\"\"\n  1502\t\n  1503\t    def __init__(self, ref_artist, use_blit=False):\n  1504\t        self.ref_artist = ref_artist\n  1505\t        if not ref_artist.pickable():\n  1506\t            ref_artist.set_picker(True)\n  1507\t        self.got_artist = False\n  1508\t        self.canvas = self.ref_artist.figure.canvas\n  1509\t        self._use_blit = use_blit and self.canvas.supports_blit\n  1510\t        self.cids = [\n  1511\t            self.canvas.callbacks._connect_picklable(\n  1512\t                'pick_event', self.on_pick),\n  1513\t            self.canvas.callbacks._connect_picklable(\n  1514\t                'button_release_event', self.on_release),\n  1515\t        ]\n  1516\t\n  1517\t    def on_motion(self, evt):\n  1518\t        if self._check_still_parented() and self.got_artist:\n  1519\t            dx = evt.x - self.mouse_x\n  1520\t            dy = evt.y - self.mouse_y\n  1521\t            self.update_offset(dx, dy)\n  1522\t            if self._use_blit:\n  1523\t                self.canvas.restore_region(self.background)\n  1524\t                self.ref_artist.draw(\n  1525\t                    self.ref_artist.figure._get_renderer())\n  1526\t                self.canvas.blit()\n  1527\t            else:\n  1528\t                self.canvas.draw()\n  1529\t\n  1530\t    def on_pick(self, evt):\n  1531\t        if self._check_still_parented() and evt.artist == self.ref_artist:\n  1532\t            self.mouse_x = evt.mouseevent.x\n  1533\t            self.mouse_y = evt.mouseevent.y\n  1534\t            self.got_artist = True\n  1535\t            if self._use_blit:\n  1536\t                self.ref_artist.set_animated(True)\n  1537\t                self.canvas.draw()\n  1538\t                self.background = \\\n  1539\t                    self.canvas.copy_from_bbox(self.ref_artist.figure.bbox)\n  1540\t                self.ref_artist.draw(\n  1541\t                    self.ref_artist.figure._get_renderer())\n  1542\t                self.canvas.blit()\n  1543\t            self._c1 = self.canvas.callbacks._connect_picklable(\n  1544\t                \"motion_notify_event\", self.on_motion)\n  1545\t            self.save_offset()\n  1546\t\n  1547\t    def on_release(self, event):\n  1548\t        if self._check_still_parented() and self.got_artist:\n  1549\t            self.finalize_offset()\n  1550\t            self.got_artist = False"
+    },
+    {
+        "step": 12,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/repro.py   --old_str 'try:\n    pickle.dumps(fig)\n    print(\"Pickling successful\")\nexcept Exception as e:\n' --new_str 'try:\n    print(f\"Canvas type: {type(fig.canvas)}\")\n    pickle.dumps(fig)\n    print(\"Pickling successful\")\nexcept Exception as e:\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/repro.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/repro.py:\n    10\tax.plot(time,speed,label=\"speed\")\n    11\t\n    12\tleg=ax.legend()\n    13\tleg.set_draggable(True) #pickling works after removing this line \n    14\t\n    15\ttry:\n    16\t    print(f\"Canvas type: {type(fig.canvas)}\")\n    17\t    pickle.dumps(fig)\n    18\t    print(\"Pickling successful\")\n    19\texcept Exception as e:\n    20\t    print(f\"Pickling failed: {e}\")\n    21\t    import traceback\n    22\t    traceback.print_exc()\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 13,
+        "thought": "",
+        "action": "python /testbed/repro.py",
+        "observation": "OBSERVATION:\nCanvas type: <class 'matplotlib.backends.backend_agg.FigureCanvasAgg'>\nPickling successful"
+    },
+    {
+        "step": 14,
+        "thought": "",
+        "action": "python -c \"import matplotlib.pyplot as plt; import pickle; fig = plt.figure(); print(f'{type(fig.canvas)=}'); pickle.dumps(fig.canvas); print('Pickle success')\"",
+        "observation": "OBSERVATION:\ntype(fig.canvas)=<class 'matplotlib.backends.backend_agg.FigureCanvasAgg'>\nPickle success"
+    },
+    {
+        "step": 15,
+        "thought": "",
+        "action": "grep -n \"def __getstate__\" /testbed/lib/matplotlib/figure.py",
+        "observation": "OBSERVATION:\n3159:    def __getstate__(self):"
+    },
+    {
+        "step": 16,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/figure.py  --view_range 3159 3185",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/figure.py:\n  3159\t    def __getstate__(self):\n  3160\t        state = super().__getstate__()\n  3161\t\n  3162\t        # The canvas cannot currently be pickled, but this has the benefit\n  3163\t        # of meaning that a figure can be detached from one canvas, and\n  3164\t        # re-attached to another.\n  3165\t        state.pop(\"canvas\")\n  3166\t\n  3167\t        # discard any changes to the dpi due to pixel ratio changes\n  3168\t        state[\"_dpi\"] = state.get('_original_dpi', state['_dpi'])\n  3169\t\n  3170\t        # add version information to the state\n  3171\t        state['__mpl_version__'] = mpl.__version__\n  3172\t\n  3173\t        # check whether the figure manager (if any) is registered with pyplot\n  3174\t        from matplotlib import _pylab_helpers\n  3175\t        if self.canvas.manager in _pylab_helpers.Gcf.figs.values():\n  3176\t            state['_restore_to_pylab'] = True\n  3177\t        return state\n  3178\t\n  3179\t    def __setstate__(self, state):\n  3180\t        version = state.pop('__mpl_version__')\n  3181\t        restore_to_pylab = state.pop('_restore_to_pylab', False)\n  3182\t\n  3183\t        if version != mpl.__version__:\n  3184\t            _api.warn_external(\n  3185\t                f\"This figure was saved with matplotlib version {version} and \""
+    },
+    {
+        "step": 17,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/repro_v2.py --file_text 'import matplotlib.pyplot as plt\nimport pickle\n\nclass UnpicklableCanvas:\n    def __init__(self):\n        self.callbacks = type('\"'\"'Mock'\"'\"', (), {'\"'\"'_connect_picklable'\"'\"': lambda *args: 1})()\n        self.supports_blit = False\n    def __reduce__(self):\n        raise TypeError(\"cannot pickle '\"'\"'UnpicklableCanvas'\"'\"' object\")\n\nfig = plt.figure()\nmock_canvas = UnpicklableCanvas()\nfig.canvas = mock_canvas\n\nax = fig.add_subplot(111)\n\ntime=[0,1,2,3,4]\nspeed=[40,43,45,47,48]\n\nax.plot(time,speed,label=\"speed\")\n\nleg=ax.legend()\nleg.set_draggable(True) \n\ntry:\n    pickle.dumps(fig)\n    print(\"Pickling successful\")\nexcept Exception as e:\n    # print(f\"Pickling failed: {e}\")\n    import traceback\n    traceback.print_exc()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/repro_v2.py"
+    },
+    {
+        "step": 18,
+        "thought": "",
+        "action": "python /testbed/repro_v2.py",
+        "observation": "OBSERVATION:\nTraceback (most recent call last):\n  File \"/testbed/repro_v2.py\", line 26, in <module>\n    pickle.dumps(fig)\n  File \"/testbed/lib/matplotlib/figure.py\", line 3175, in __getstate__\n    if self.canvas.manager in _pylab_helpers.Gcf.figs.values():\n       ^^^^^^^^^^^^^^^^^^^\nAttributeError: 'UnpicklableCanvas' object has no attribute 'manager'"
+    },
+    {
+        "step": 19,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/repro_v2.py   --old_str 'class UnpicklableCanvas:\n    def __init__(self):\n        self.callbacks = type('\"'\"'Mock'\"'\"', (), {'\"'\"'_connect_picklable'\"'\"': lambda *args: 1})()\n        self.supports_blit = False\n    def __reduce__(self):\n        raise TypeError(\"cannot pickle '\"'\"'UnpicklableCanvas'\"'\"' object\")\n' --new_str 'class UnpicklableCanvas:\n    def __init__(self):\n        self.callbacks = type('\"'\"'Mock'\"'\"', (), {'\"'\"'_connect_picklable'\"'\"': lambda *args: 1})()\n        self.supports_blit = False\n        self.manager = None\n    def __reduce__(self):\n        raise TypeError(\"cannot pickle '\"'\"'UnpicklableCanvas'\"'\"' object\")\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/repro_v2.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/repro_v2.py:\n     1\timport matplotlib.pyplot as plt\n     2\timport pickle\n     3\t\n     4\tclass UnpicklableCanvas:\n     5\t    def __init__(self):\n     6\t        self.callbacks = type('Mock', (), {'_connect_picklable': lambda *args: 1})()\n     7\t        self.supports_blit = False\n     8\t        self.manager = None\n     9\t    def __reduce__(self):\n    10\t        raise TypeError(\"cannot pickle 'UnpicklableCanvas' object\")\n    11\t\n    12\tfig = plt.figure()\n    13\tmock_canvas = UnpicklableCanvas()\n    14\tfig.canvas = mock_canvas\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 20,
+        "thought": "",
+        "action": "python /testbed/repro_v2.py",
+        "observation": "OBSERVATION:\nTraceback (most recent call last):\n  File \"/testbed/repro_v2.py\", line 27, in <module>\n    pickle.dumps(fig)\n  File \"/testbed/repro_v2.py\", line 10, in __reduce__\n    raise TypeError(\"cannot pickle 'UnpicklableCanvas' object\")\nTypeError: cannot pickle 'UnpicklableCanvas' object"
+    },
+    {
+        "step": 21,
+        "thought": "",
+        "action": "grep -r \"class DraggableAnnotation\" /testbed/lib/matplotlib",
+        "observation": "OBSERVATION:\n/testbed/lib/matplotlib/offsetbox.py:class DraggableAnnotation(DraggableBase):"
+    },
+    {
+        "step": 22,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/offsetbox.py  --view_range 1474 1550",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/offsetbox.py:\n  1474\tclass DraggableBase:\n  1475\t    \"\"\"\n  1476\t    Helper base class for a draggable artist (legend, offsetbox).\n  1477\t\n  1478\t    Derived classes must override the following methods::\n  1479\t\n  1480\t        def save_offset(self):\n  1481\t            '''\n  1482\t            Called when the object is picked for dragging; should save the\n  1483\t            reference position of the artist.\n  1484\t            '''\n  1485\t\n  1486\t        def update_offset(self, dx, dy):\n  1487\t            '''\n  1488\t            Called during the dragging; (*dx*, *dy*) is the pixel offset from\n  1489\t            the point where the mouse drag started.\n  1490\t            '''\n  1491\t\n  1492\t    Optionally, you may override the following method::\n  1493\t\n  1494\t        def finalize_offset(self):\n  1495\t            '''Called when the mouse is released.'''\n  1496\t\n  1497\t    In the current implementation of `.DraggableLegend` and\n  1498\t    `DraggableAnnotation`, `update_offset` places the artists in display\n  1499\t    coordinates, and `finalize_offset` recalculates their position in axes\n  1500\t    coordinate and set a relevant attribute.\n  1501\t    \"\"\"\n  1502\t\n  1503\t    def __init__(self, ref_artist, use_blit=False):\n  1504\t        self.ref_artist = ref_artist\n  1505\t        if not ref_artist.pickable():\n  1506\t            ref_artist.set_picker(True)\n  1507\t        self.got_artist = False\n  1508\t        self.canvas = self.ref_artist.figure.canvas\n  1509\t        self._use_blit = use_blit and self.canvas.supports_blit\n  1510\t        self.cids = [\n  1511\t            self.canvas.callbacks._connect_picklable(\n  1512\t                'pick_event', self.on_pick),\n  1513\t            self.canvas.callbacks._connect_picklable(\n  1514\t                'button_release_event', self.on_release),\n  1515\t        ]\n  1516\t\n  1517\t    def on_motion(self, evt):\n  1518\t        if self._check_still_parented() and self.got_artist:\n  1519\t            dx = evt.x - self.mouse_x\n  1520\t            dy = evt.y - self.mouse_y\n  1521\t            self.update_offset(dx, dy)\n  1522\t            if self._use_blit:\n  1523\t                self.canvas.restore_region(self.background)\n  1524\t                self.ref_artist.draw(\n  1525\t                    self.ref_artist.figure._get_renderer())\n  1526\t                self.canvas.blit()\n  1527\t            else:\n  1528\t                self.canvas.draw()\n  1529\t\n  1530\t    def on_pick(self, evt):\n  1531\t        if self._check_still_parented() and evt.artist == self.ref_artist:\n  1532\t            self.mouse_x = evt.mouseevent.x\n  1533\t            self.mouse_y = evt.mouseevent.y\n  1534\t            self.got_artist = True\n  1535\t            if self._use_blit:\n  1536\t                self.ref_artist.set_animated(True)\n  1537\t                self.canvas.draw()\n  1538\t                self.background = \\\n  1539\t                    self.canvas.copy_from_bbox(self.ref_artist.figure.bbox)\n  1540\t                self.ref_artist.draw(\n  1541\t                    self.ref_artist.figure._get_renderer())\n  1542\t                self.canvas.blit()\n  1543\t            self._c1 = self.canvas.callbacks._connect_picklable(\n  1544\t                \"motion_notify_event\", self.on_motion)\n  1545\t            self.save_offset()\n  1546\t\n  1547\t    def on_release(self, event):\n  1548\t        if self._check_still_parented() and self.got_artist:\n  1549\t            self.finalize_offset()\n  1550\t            self.got_artist = False"
+    },
+    {
+        "step": 23,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/offsetbox.py  --view_range 1570 1582",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/offsetbox.py:\n  1570\t            pass\n  1571\t        else:\n  1572\t            self.canvas.mpl_disconnect(c1)\n  1573\t\n  1574\t    def save_offset(self):\n  1575\t        pass\n  1576\t\n  1577\t    def update_offset(self, dx, dy):\n  1578\t        pass\n  1579\t\n  1580\t    def finalize_offset(self):\n  1581\t        pass\n  1582"
+    },
+    {
+        "step": 24,
+        "thought": "",
+        "action": "grep -n \"def disconnect\" /testbed/lib/matplotlib/offsetbox.py",
+        "observation": "OBSERVATION:\n1563:    def disconnect(self):"
+    },
+    {
+        "step": 25,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/offsetbox.py  --view_range 1563 1573",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/offsetbox.py:\n  1563\t    def disconnect(self):\n  1564\t        \"\"\"Disconnect the callbacks.\"\"\"\n  1565\t        for cid in self.cids:\n  1566\t            self.canvas.mpl_disconnect(cid)\n  1567\t        try:\n  1568\t            c1 = self._c1\n  1569\t        except AttributeError:\n  1570\t            pass\n  1571\t        else:\n  1572\t            self.canvas.mpl_disconnect(c1)\n  1573"
+    },
+    {
+        "step": 26,
+        "thought": "",
+        "action": "grep -r \"class Draggable\" /testbed/lib/matplotlib",
+        "observation": "OBSERVATION:\n/testbed/lib/matplotlib/offsetbox.py:class DraggableBase:\n/testbed/lib/matplotlib/offsetbox.py:class DraggableOffsetBox(DraggableBase):\n/testbed/lib/matplotlib/offsetbox.py:class DraggableAnnotation(DraggableBase):\n/testbed/lib/matplotlib/legend.py:class DraggableLegend(DraggableOffsetBox):"
+    },
+    {
+        "step": 27,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/offsetbox.py  --view_range 1474 1573",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/offsetbox.py:\n  1474\tclass DraggableBase:\n  1475\t    \"\"\"\n  1476\t    Helper base class for a draggable artist (legend, offsetbox).\n  1477\t\n  1478\t    Derived classes must override the following methods::\n  1479\t\n  1480\t        def save_offset(self):\n  1481\t            '''\n  1482\t            Called when the object is picked for dragging; should save the\n  1483\t            reference position of the artist.\n  1484\t            '''\n  1485\t\n  1486\t        def update_offset(self, dx, dy):\n  1487\t            '''\n  1488\t            Called during the dragging; (*dx*, *dy*) is the pixel offset from\n  1489\t            the point where the mouse drag started.\n  1490\t            '''\n  1491\t\n  1492\t    Optionally, you may override the following method::\n  1493\t\n  1494\t        def finalize_offset(self):\n  1495\t            '''Called when the mouse is released.'''\n  1496\t\n  1497\t    In the current implementation of `.DraggableLegend` and\n  1498\t    `DraggableAnnotation`, `update_offset` places the artists in display\n  1499\t    coordinates, and `finalize_offset` recalculates their position in axes\n  1500\t    coordinate and set a relevant attribute.\n  1501\t    \"\"\"\n  1502\t\n  1503\t    def __init__(self, ref_artist, use_blit=False):\n  1504\t        self.ref_artist = ref_artist\n  1505\t        if not ref_artist.pickable():\n  1506\t            ref_artist.set_picker(True)\n  1507\t        self.got_artist = False\n  1508\t        self.canvas = self.ref_artist.figure.canvas\n  1509\t        self._use_blit = use_blit and self.canvas.supports_blit\n  1510\t        self.cids = [\n  1511\t            self.canvas.callbacks._connect_picklable(\n  1512\t                'pick_event', self.on_pick),\n  1513\t            self.canvas.callbacks._connect_picklable(\n  1514\t                'button_release_event', self.on_release),\n  1515\t        ]\n  1516\t\n  1517\t    def on_motion(self, evt):\n  1518\t        if self._check_still_parented() and self.got_artist:\n  1519\t            dx = evt.x - self.mouse_x\n  1520\t            dy = evt.y - self.mouse_y\n  1521\t            self.update_offset(dx, dy)\n  1522\t            if self._use_blit:\n  1523\t                self.canvas.restore_region(self.background)\n  1524\t                self.ref_artist.draw(\n  1525\t                    self.ref_artist.figure._get_renderer())\n  1526\t                self.canvas.blit()\n  1527\t            else:\n  1528\t                self.canvas.draw()\n  1529\t\n  1530\t    def on_pick(self, evt):\n  1531\t        if self._check_still_parented() and evt.artist == self.ref_artist:\n  1532\t            self.mouse_x = evt.mouseevent.x\n  1533\t            self.mouse_y = evt.mouseevent.y\n  1534\t            self.got_artist = True\n  1535\t            if self._use_blit:\n  1536\t                self.ref_artist.set_animated(True)\n  1537\t                self.canvas.draw()\n  1538\t                self.background = \\\n  1539\t                    self.canvas.copy_from_bbox(self.ref_artist.figure.bbox)\n  1540\t                self.ref_artist.draw(\n  1541\t                    self.ref_artist.figure._get_renderer())\n  1542\t                self.canvas.blit()\n  1543\t            self._c1 = self.canvas.callbacks._connect_picklable(\n  1544\t                \"motion_notify_event\", self.on_motion)\n  1545\t            self.save_offset()\n  1546\t\n  1547\t    def on_release(self, event):\n  1548\t        if self._check_still_parented() and self.got_artist:\n  1549\t            self.finalize_offset()\n  1550\t            self.got_artist = False\n  1551\t            self.canvas.mpl_disconnect(self._c1)\n  1552\t\n  1553\t            if self._use_blit:\n  1554\t                self.ref_artist.set_animated(False)\n  1555\t\n  1556\t    def _check_still_parented(self):\n  1557\t        if self.ref_artist.figure is None:\n  1558\t            self.disconnect()\n  1559\t            return False\n  1560\t        else:\n  1561\t            return True\n  1562\t\n  1563\t    def disconnect(self):\n  1564\t        \"\"\"Disconnect the callbacks.\"\"\"\n  1565\t        for cid in self.cids:\n  1566\t            self.canvas.mpl_disconnect(cid)\n  1567\t        try:\n  1568\t            c1 = self._c1\n  1569\t        except AttributeError:\n  1570\t            pass\n  1571\t        else:\n  1572\t            self.canvas.mpl_disconnect(c1)\n  1573"
+    },
+    {
+        "step": 28,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/lib/matplotlib/offsetbox.py   --old_str '    def on_release(self, event):\n        if self._check_still_parented() and self.got_artist:\n            self.finalize_offset()\n            self.got_artist = False\n            self.canvas.mpl_disconnect(self._c1)\n\n            if self._use_blit:\n                self.ref_artist.set_animated(False)\n\n    def _check_still_parented(self):\n' --new_str '    def on_release(self, event):\n        if self._check_still_parented() and self.got_artist:\n            self.finalize_offset()\n            self.got_artist = False\n            if self.canvas is not None:\n                self.canvas.mpl_disconnect(self._c1)\n\n            if self._use_blit:\n                self.ref_artist.set_animated(False)\n\n    def __getstate__(self):\n        state = self.__dict__.copy()\n        state.pop(\"canvas\", None)\n        state.pop(\"cids\", None)\n        state.pop(\"_c1\", None)\n        state.pop(\"background\", None)\n        return state\n\n    def __setstate__(self, state):\n        self.__dict__ = state\n        self.canvas = None\n        self.cids = []\n\n    def _check_still_parented(self):\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/lib/matplotlib/offsetbox.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/lib/matplotlib/offsetbox.py:\n  1542\t                self.canvas.blit()\n  1543\t            self._c1 = self.canvas.callbacks._connect_picklable(\n  1544\t                \"motion_notify_event\", self.on_motion)\n  1545\t            self.save_offset()\n  1546\t\n  1547\t    def on_release(self, event):\n  1548\t        if self._check_still_parented() and self.got_artist:\n  1549\t            self.finalize_offset()\n  1550\t            self.got_artist = False\n  1551\t            if self.canvas is not None:\n  1552\t                self.canvas.mpl_disconnect(self._c1)\n  1553\t\n  1554\t            if self._use_blit:\n  1555\t                self.ref_artist.set_animated(False)\n  1556\t\n  1557\t    def __getstate__(self):\n  1558\t        state = self.__dict__.copy()\n  1559\t        state.pop(\"canvas\", None)\n  1560\t        state.pop(\"cids\", None)\n  1561\t        state.pop(\"_c1\", None)\n  1562\t        state.pop(\"background\", None)\n  1563\t        return state\n  1564\t\n  1565\t    def __setstate__(self, state):\n  1566\t        self.__dict__ = state\n  1567\t        self.canvas = None\n  1568\t        self.cids = []\n  1569\t\n  1570\t    def _check_still_parented(self):\n  1571\t        if self.ref_artist.figure is None:\n  1572\t            self.disconnect()\n  1573\t            return False\n  1574\t        else:\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 29,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/lib/matplotlib/offsetbox.py   --old_str '    def disconnect(self):\n        \"\"\"Disconnect the callbacks.\"\"\"\n        for cid in self.cids:\n            self.canvas.mpl_disconnect(cid)\n        try:\n            c1 = self._c1\n        except AttributeError:\n            pass\n        else:\n            self.canvas.mpl_disconnect(c1)\n' --new_str '    def disconnect(self):\n        \"\"\"Disconnect the callbacks.\"\"\"\n        if self.canvas is not None:\n            for cid in self.cids:\n                self.canvas.mpl_disconnect(cid)\n            try:\n                c1 = self._c1\n            except AttributeError:\n                pass\n            else:\n                self.canvas.mpl_disconnect(c1)\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/lib/matplotlib/offsetbox.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/lib/matplotlib/offsetbox.py:\n  1572\t            self.disconnect()\n  1573\t            return False\n  1574\t        else:\n  1575\t            return True\n  1576\t\n  1577\t    def disconnect(self):\n  1578\t        \"\"\"Disconnect the callbacks.\"\"\"\n  1579\t        if self.canvas is not None:\n  1580\t            for cid in self.cids:\n  1581\t                self.canvas.mpl_disconnect(cid)\n  1582\t            try:\n  1583\t                c1 = self._c1\n  1584\t            except AttributeError:\n  1585\t                pass\n  1586\t            else:\n  1587\t                self.canvas.mpl_disconnect(c1)\n  1588\t\n  1589\t    def save_offset(self):\n  1590\t        pass\n  1591\t\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 30,
+        "thought": "",
+        "action": "python /testbed/repro_v2.py",
+        "observation": "OBSERVATION:\nPickling successful"
+    },
+    {
+        "step": 31,
+        "thought": "",
+        "action": "python /testbed/repro.py",
+        "observation": "OBSERVATION:\nCanvas type: <class 'matplotlib.backends.backend_agg.FigureCanvasAgg'>\nPickling successful"
+    },
+    {
+        "step": 32,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/test_after_pickle.py --file_text 'import matplotlib.pyplot as plt\nimport pickle\n\nfig = plt.figure()\nax = fig.add_subplot(111)\nax.plot([0, 1], [0, 1], label=\"test\")\nleg = ax.legend()\nleg.set_draggable(True)\n\npickled_fig = pickle.dumps(fig)\nfig2 = pickle.loads(pickled_fig)\n\n# For a figure created with ax.legend(), the legend is in ax.legend_\nax2 = fig2.axes[0]\nleg2 = ax2.get_legend()\n\nprint(f\"Draggable before set_draggable(True): {leg2.get_draggable()}\")\ntry:\n    leg2.set_draggable(True)\n    print(\"set_draggable(True) successful\")\nexcept Exception as e:\n    print(f\"set_draggable(True) failed: {e}\")\n    import traceback\n    traceback.print_exc()\n\nprint(f\"Draggable after set_draggable(True): {leg2.get_draggable()}\")\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_after_pickle.py"
+    },
+    {
+        "step": 33,
+        "thought": "",
+        "action": "python /testbed/test_after_pickle.py",
+        "observation": "OBSERVATION:\nDraggable before set_draggable(True): True\nset_draggable(True) successful\nDraggable after set_draggable(True): True"
+    },
+    {
+        "step": 34,
+        "thought": "",
+        "action": "grep -n \"def draggable\" /testbed/lib/matplotlib/text.py",
+        "observation": "OBSERVATION:\n1620:    def draggable(self, state=None, use_blit=False):"
+    },
+    {
+        "step": 35,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/text.py  --view_range 1620 1650",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/text.py:\n  1620\t    def draggable(self, state=None, use_blit=False):\n  1621\t        \"\"\"\n  1622\t        Set whether the annotation is draggable with the mouse.\n  1623\t\n  1624\t        Parameters\n  1625\t        ----------\n  1626\t        state : bool or None\n  1627\t            - True or False: set the draggability.\n  1628\t            - None: toggle the draggability.\n  1629\t\n  1630\t        Returns\n  1631\t        -------\n  1632\t        DraggableAnnotation or None\n  1633\t            If the annotation is draggable, the corresponding\n  1634\t            `.DraggableAnnotation` helper is returned.\n  1635\t        \"\"\"\n  1636\t        from matplotlib.offsetbox import DraggableAnnotation\n  1637\t        is_draggable = self._draggable is not None\n  1638\t\n  1639\t        # if state is None we'll toggle\n  1640\t        if state is None:\n  1641\t            state = not is_draggable\n  1642\t\n  1643\t        if state:\n  1644\t            if self._draggable is None:\n  1645\t                self._draggable = DraggableAnnotation(self, use_blit)\n  1646\t        else:\n  1647\t            if self._draggable is not None:\n  1648\t                self._draggable.disconnect()\n  1649\t            self._draggable = None\n  1650"
+    },
+    {
+        "step": 36,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/lib/matplotlib/offsetbox.py  --view_range 1547 1588",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/lib/matplotlib/offsetbox.py:\n  1547\t    def on_release(self, event):\n  1548\t        if self._check_still_parented() and self.got_artist:\n  1549\t            self.finalize_offset()\n  1550\t            self.got_artist = False\n  1551\t            if self.canvas is not None:\n  1552\t                self.canvas.mpl_disconnect(self._c1)\n  1553\t\n  1554\t            if self._use_blit:\n  1555\t                self.ref_artist.set_animated(False)\n  1556\t\n  1557\t    def __getstate__(self):\n  1558\t        state = self.__dict__.copy()\n  1559\t        state.pop(\"canvas\", None)\n  1560\t        state.pop(\"cids\", None)\n  1561\t        state.pop(\"_c1\", None)\n  1562\t        state.pop(\"background\", None)\n  1563\t        return state\n  1564\t\n  1565\t    def __setstate__(self, state):\n  1566\t        self.__dict__ = state\n  1567\t        self.canvas = None\n  1568\t        self.cids = []\n  1569\t\n  1570\t    def _check_still_parented(self):\n  1571\t        if self.ref_artist.figure is None:\n  1572\t            self.disconnect()\n  1573\t            return False\n  1574\t        else:\n  1575\t            return True\n  1576\t\n  1577\t    def disconnect(self):\n  1578\t        \"\"\"Disconnect the callbacks.\"\"\"\n  1579\t        if self.canvas is not None:\n  1580\t            for cid in self.cids:\n  1581\t                self.canvas.mpl_disconnect(cid)\n  1582\t            try:\n  1583\t                c1 = self._c1\n  1584\t            except AttributeError:\n  1585\t                pass\n  1586\t            else:\n  1587\t                self.canvas.mpl_disconnect(c1)\n  1588"
+    },
+    {
+        "step": 37,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/lib/matplotlib/offsetbox.py   --old_str '    def __setstate__(self, state):\n        self.__dict__ = state\n        self.canvas = None\n        self.cids = []\n' --new_str '    def __setstate__(self, state):\n        self.__dict__ = state\n        self.canvas = None\n        self.cids = []\n        self.got_artist = False\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/lib/matplotlib/offsetbox.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/lib/matplotlib/offsetbox.py:\n  1560\t        state.pop(\"cids\", None)\n  1561\t        state.pop(\"_c1\", None)\n  1562\t        state.pop(\"background\", None)\n  1563\t        return state\n  1564\t\n  1565\t    def __setstate__(self, state):\n  1566\t        self.__dict__ = state\n  1567\t        self.canvas = None\n  1568\t        self.cids = []\n  1569\t        self.got_artist = False\n  1570\t\n  1571\t    def _check_still_parented(self):\n  1572\t        if self.ref_artist.figure is None:\n  1573\t            self.disconnect()\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 38,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/test_annotation.py --file_text 'import matplotlib.pyplot as plt\nimport pickle\n\nfig, ax = plt.subplots()\nann = ax.annotate(\"test\", xy=(0.5, 0.5))\nann.draggable(True)\n\ntry:\n    pickle.dumps(fig)\n    print(\"Pickling annotation successful\")\nexcept Exception as e:\n    import traceback\n    traceback.print_exc()\n\nfig2 = pickle.loads(pickle.dumps(fig))\nax2 = fig2.axes[0]\nann2 = ax2.texts[0]\nprint(f\"Draggable before draggable(True): {ann2._draggable is not None}\")\nann2.draggable(True)\nprint(f\"Draggable after draggable(True): {ann2._draggable is not None}\")\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_annotation.py"
+    },
+    {
+        "step": 39,
+        "thought": "",
+        "action": "python /testbed/test_annotation.py",
+        "observation": "OBSERVATION:\nPickling annotation successful\nDraggable before draggable(True): True\nDraggable after draggable(True): True"
+    },
+    {
+        "step": 40,
+        "thought": "",
+        "action": "cat /testbed/lib/matplotlib/offsetbox.py | sed -n '1547,1588p'",
+        "observation": "OBSERVATION:\n    def on_release(self, event):\n        if self._check_still_parented() and self.got_artist:\n            self.finalize_offset()\n            self.got_artist = False\n            if self.canvas is not None:\n                self.canvas.mpl_disconnect(self._c1)\n\n            if self._use_blit:\n                self.ref_artist.set_animated(False)\n\n    def __getstate__(self):\n        state = self.__dict__.copy()\n        state.pop(\"canvas\", None)\n        state.pop(\"cids\", None)\n        state.pop(\"_c1\", None)\n        state.pop(\"background\", None)\n        return state\n\n    def __setstate__(self, state):\n        self.__dict__ = state\n        self.canvas = None\n        self.cids = []\n        self.got_artist = False\n\n    def _check_still_parented(self):\n        if self.ref_artist.figure is None:\n            self.disconnect()\n            return False\n        else:\n            return True\n\n    def disconnect(self):\n        \"\"\"Disconnect the callbacks.\"\"\"\n        if self.canvas is not None:\n            for cid in self.cids:\n                self.canvas.mpl_disconnect(cid)\n            try:\n                c1 = self._c1\n            except AttributeError:\n                pass\n            else:\n                self.canvas.mpl_disconnect(c1)"
+    },
+    {
+        "step": 41,
+        "thought": "",
+        "action": "cat -n /testbed/lib/matplotlib/offsetbox.py | sed -n '1547,1588p'",
+        "observation": "OBSERVATION:\n  1547\t    def on_release(self, event):\n  1548\t        if self._check_still_parented() and self.got_artist:\n  1549\t            self.finalize_offset()\n  1550\t            self.got_artist = False\n  1551\t            if self.canvas is not None:\n  1552\t                self.canvas.mpl_disconnect(self._c1)\n  1553\t\n  1554\t            if self._use_blit:\n  1555\t                self.ref_artist.set_animated(False)\n  1556\t\n  1557\t    def __getstate__(self):\n  1558\t        state = self.__dict__.copy()\n  1559\t        state.pop(\"canvas\", None)\n  1560\t        state.pop(\"cids\", None)\n  1561\t        state.pop(\"_c1\", None)\n  1562\t        state.pop(\"background\", None)\n  1563\t        return state\n  1564\t\n  1565\t    def __setstate__(self, state):\n  1566\t        self.__dict__ = state\n  1567\t        self.canvas = None\n  1568\t        self.cids = []\n  1569\t        self.got_artist = False\n  1570\t\n  1571\t    def _check_still_parented(self):\n  1572\t        if self.ref_artist.figure is None:\n  1573\t            self.disconnect()\n  1574\t            return False\n  1575\t        else:\n  1576\t            return True\n  1577\t\n  1578\t    def disconnect(self):\n  1579\t        \"\"\"Disconnect the callbacks.\"\"\"\n  1580\t        if self.canvas is not None:\n  1581\t            for cid in self.cids:\n  1582\t                self.canvas.mpl_disconnect(cid)\n  1583\t            try:\n  1584\t                c1 = self._c1\n  1585\t            except AttributeError:\n  1586\t                pass\n  1587\t            else:\n  1588\t                self.canvas.mpl_disconnect(c1)"
+    },
+    {
+        "step": 42,
+        "thought": "",
+        "action": "python /testbed/repro.py && python /testbed/repro_v2.py && python /testbed/test_after_pickle.py && python /testbed/test_annotation.py",
+        "observation": "OBSERVATION:\nCanvas type: <class 'matplotlib.backends.backend_agg.FigureCanvasAgg'>\nPickling successful\nPickling successful\nDraggable before set_draggable(True): True\nset_draggable(True) successful\nDraggable after set_draggable(True): True\nPickling annotation successful\nDraggable before draggable(True): True\nDraggable after draggable(True): True"
+    },
+    {
+        "step": 43,
+        "thought": "",
+        "action": "rm /testbed/repro.py /testbed/repro_v2.py /testbed/test_after_pickle.py /testbed/test_annotation.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 44,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\ndiff --git a/lib/matplotlib/offsetbox.py b/lib/matplotlib/offsetbox.py\nindex 1dee8a23d9..6aa804be3c 100644\n--- a/lib/matplotlib/offsetbox.py\n+++ b/lib/matplotlib/offsetbox.py\n@@ -1548,11 +1548,26 @@ class DraggableBase:\n         if self._check_still_parented() and self.got_artist:\n             self.finalize_offset()\n             self.got_artist = False\n-            self.canvas.mpl_disconnect(self._c1)\n+            if self.canvas is not None:\n+                self.canvas.mpl_disconnect(self._c1)\n \n             if self._use_blit:\n                 self.ref_artist.set_animated(False)\n \n+    def __getstate__(self):\n+        state = self.__dict__.copy()\n+        state.pop(\"canvas\", None)\n+        state.pop(\"cids\", None)\n+        state.pop(\"_c1\", None)\n+        state.pop(\"background\", None)\n+        return state\n+\n+    def __setstate__(self, state):\n+        self.__dict__ = state\n+        self.canvas = None\n+        self.cids = []\n+        self.got_artist = False\n+\n     def _check_still_parented(self):\n         if self.ref_artist.figure is None:\n             self.disconnect()\n@@ -1562,14 +1577,15 @@ class DraggableBase:\n \n     def disconnect(self):\n         \"\"\"Disconnect the callbacks.\"\"\"\n-        for cid in self.cids:\n-            self.canvas.mpl_disconnect(cid)\n-        try:\n-            c1 = self._c1\n-        except AttributeError:\n-            pass\n-        else:\n-            self.canvas.mpl_disconnect(c1)\n+        if self.canvas is not None:\n+            for cid in self.cids:\n+                self.canvas.mpl_disconnect(cid)\n+            try:\n+                c1 = self._c1\n+            except AttributeError:\n+                pass\n+            else:\n+                self.canvas.mpl_disconnect(c1)\n \n     def save_offset(self):\n         pass"
+    }
+]

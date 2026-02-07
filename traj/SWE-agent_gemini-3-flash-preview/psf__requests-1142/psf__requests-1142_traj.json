@@ -1,0 +1,350 @@
+[
+    {
+        "step": 1,
+        "thought": "",
+        "action": "str_replace_editor view /testbed",
+        "observation": "OBSERVATION:\nHere's the files and directories up to 2 levels deep in /testbed, excluding hidden items:\n/testbed\n/testbed/requests.egg-info\n/testbed/requests.egg-info/not-zip-safe\n/testbed/requests.egg-info/top_level.txt\n/testbed/requests.egg-info/dependency_links.txt\n/testbed/requests.egg-info/PKG-INFO\n/testbed/requests.egg-info/SOURCES.txt\n/testbed/LICENSE\n/testbed/requests\n/testbed/requests/__init__.py\n/testbed/requests/sessions.py\n/testbed/requests/cacert.pem\n/testbed/requests/structures.py\n/testbed/requests/compat.py\n/testbed/requests/api.py\n/testbed/requests/utils.py\n/testbed/requests/exceptions.py\n/testbed/requests/adapters.py\n/testbed/requests/status_codes.py\n/testbed/requests/cookies.py\n/testbed/requests/packages\n/testbed/requests/auth.py\n/testbed/requests/hooks.py\n/testbed/requests/certs.py\n/testbed/requests/models.py\n/testbed/requests/__pycache__\n/testbed/MANIFEST.in\n/testbed/requirements.txt\n/testbed/setup.py\n/testbed/test_requests.py\n/testbed/AUTHORS.rst\n/testbed/README.rst\n/testbed/Makefile\n/testbed/NOTICE\n/testbed/docs\n/testbed/docs/dev\n/testbed/docs/community\n/testbed/docs/MANIFEST.in\n/testbed/docs/_static\n/testbed/docs/_templates\n/testbed/docs/make.bat\n/testbed/docs/index.rst\n/testbed/docs/Makefile\n/testbed/docs/_themes\n/testbed/docs/user\n/testbed/docs/conf.py\n/testbed/docs/api.rst\n/testbed/ext\n/testbed/ext/requests-logo.ai\n/testbed/HISTORY.rst"
+    },
+    {
+        "step": 2,
+        "thought": "",
+        "action": "grep -rn \"Content-Length\" /testbed/requests",
+        "observation": "OBSERVATION:\n/testbed/requests/adapters.py:157:        chunked = not (request.body is None or 'Content-Length' in request.headers)\n/testbed/requests/models.py:362:                self.headers['Content-Length'] = length\n/testbed/requests/models.py:389:        self.headers['Content-Length'] = '0'\n/testbed/requests/models.py:392:            self.headers['Content-Length'] = str(body.tell())\n/testbed/requests/models.py:395:            self.headers['Content-Length'] = str(len(body))\n/testbed/requests/models.py:410:            # Recompute Content-Length\ngrep: /testbed/requests/__pycache__/models.cpython-39.pyc: binary file matches\ngrep: /testbed/requests/__pycache__/adapters.cpython-39.pyc: binary file matches"
+    },
+    {
+        "step": 3,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/requests/models.py  --view_range 350 420",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/requests/models.py:\n   350\t        try:\n   351\t            length = str(super_len(data))\n   352\t        except (TypeError, AttributeError):\n   353\t            length = False\n   354\t\n   355\t        if is_stream:\n   356\t            body = data\n   357\t\n   358\t            if files:\n   359\t                raise NotImplementedError('Streamed bodies and files are mutually exclusive.')\n   360\t\n   361\t            if length:\n   362\t                self.headers['Content-Length'] = length\n   363\t            else:\n   364\t                self.headers['Transfer-Encoding'] = 'chunked'\n   365\t        # Check if file, fo, generator, iterator.\n   366\t        # If not, run through normal process.\n   367\t\n   368\t        else:\n   369\t            # Multi-part file uploads.\n   370\t            if files:\n   371\t                (body, content_type) = self._encode_files(files, data)\n   372\t            else:\n   373\t                if data:\n   374\t                    body = self._encode_params(data)\n   375\t                    if isinstance(data, str) or isinstance(data, builtin_str) or hasattr(data, 'read'):\n   376\t                        content_type = None\n   377\t                    else:\n   378\t                        content_type = 'application/x-www-form-urlencoded'\n   379\t\n   380\t            self.prepare_content_length(body)\n   381\t\n   382\t            # Add content-type if it wasn't explicitly provided.\n   383\t            if (content_type) and (not 'content-type' in self.headers):\n   384\t                self.headers['Content-Type'] = content_type\n   385\t\n   386\t        self.body = body\n   387\t\n   388\t    def prepare_content_length(self, body):\n   389\t        self.headers['Content-Length'] = '0'\n   390\t        if hasattr(body, 'seek') and hasattr(body, 'tell'):\n   391\t            body.seek(0, 2)\n   392\t            self.headers['Content-Length'] = str(body.tell())\n   393\t            body.seek(0, 0)\n   394\t        elif body is not None:\n   395\t            self.headers['Content-Length'] = str(len(body))\n   396\t\n   397\t    def prepare_auth(self, auth):\n   398\t        \"\"\"Prepares the given HTTP auth data.\"\"\"\n   399\t        if auth:\n   400\t            if isinstance(auth, tuple) and len(auth) == 2:\n   401\t                # special-case basic HTTP auth\n   402\t                auth = HTTPBasicAuth(*auth)\n   403\t\n   404\t            # Allow auth to make its changes.\n   405\t            r = auth(self)\n   406\t\n   407\t            # Update self to reflect the auth changes.\n   408\t            self.__dict__.update(r.__dict__)\n   409\t\n   410\t            # Recompute Content-Length\n   411\t            self.prepare_content_length(self.body)\n   412\t\n   413\t    def prepare_cookies(self, cookies):\n   414\t        \"\"\"Prepares the given HTTP cookie data.\"\"\"\n   415\t\n   416\t        if isinstance(cookies, cookielib.CookieJar):\n   417\t            cookies = cookies\n   418\t        else:\n   419\t            cookies = cookiejar_from_dict(cookies)\n   420"
+    },
+    {
+        "step": 4,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/requests/models.py  --view_range 300 350",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/requests/models.py:\n   300\t        if is_py2:\n   301\t            if isinstance(scheme, str):\n   302\t                scheme = scheme.encode('utf-8')\n   303\t            if isinstance(netloc, str):\n   304\t                netloc = netloc.encode('utf-8')\n   305\t            if isinstance(path, str):\n   306\t                path = path.encode('utf-8')\n   307\t            if isinstance(_params, str):\n   308\t                _params = _params.encode('utf-8')\n   309\t            if isinstance(query, str):\n   310\t                query = query.encode('utf-8')\n   311\t            if isinstance(fragment, str):\n   312\t                fragment = fragment.encode('utf-8')\n   313\t\n   314\t        enc_params = self._encode_params(params)\n   315\t        if enc_params:\n   316\t            if query:\n   317\t                query = '%s&%s' % (query, enc_params)\n   318\t            else:\n   319\t                query = enc_params\n   320\t\n   321\t        url = requote_uri(urlunparse([scheme, netloc, path, _params, query, fragment]))\n   322\t        self.url = url\n   323\t\n   324\t    def prepare_headers(self, headers):\n   325\t        \"\"\"Prepares the given HTTP headers.\"\"\"\n   326\t\n   327\t        if headers:\n   328\t            self.headers = CaseInsensitiveDict(headers)\n   329\t        else:\n   330\t            self.headers = CaseInsensitiveDict()\n   331\t\n   332\t    def prepare_body(self, data, files):\n   333\t        \"\"\"Prepares the given HTTP body data.\"\"\"\n   334\t\n   335\t        # Check if file, fo, generator, iterator.\n   336\t        # If not, run through normal process.\n   337\t\n   338\t        # Nottin' on you.\n   339\t        body = None\n   340\t        content_type = None\n   341\t        length = None\n   342\t        is_stream = False\n   343\t\n   344\t        is_stream = all([\n   345\t            hasattr(data, '__iter__'),\n   346\t            not isinstance(data, basestring),\n   347\t            not isinstance(data, dict)\n   348\t        ])\n   349\t\n   350\t        try:"
+    },
+    {
+        "step": 5,
+        "thought": "",
+        "action": "str_replace_editor create /reproduce_issue.py --file_text 'import requests\n\ndef test_content_length_on_get():\n    # We can use PreparedRequest to see what headers would be sent\n    # without actually making a network call.\n    req = requests.Request('\"'\"'GET'\"'\"', '\"'\"'http://httpbin.org/get'\"'\"')\n    prepared = req.prepare()\n    \n    print(f\"Method: {prepared.method}\")\n    print(f\"Headers: {prepared.headers}\")\n    \n    if '\"'\"'Content-Length'\"'\"' in prepared.headers:\n        print(f\"Content-Length: {prepared.headers['\"'\"'Content-Length'\"'\"']}\")\n        if prepared.method == '\"'\"'GET'\"'\"' and prepared.headers['\"'\"'Content-Length'\"'\"'] == '\"'\"'0'\"'\"':\n            print(\"ISSUE REPRODUCED: Content-Length: 0 found on GET request.\")\n    else:\n        print(\"Content-Length not found in headers.\")\n\nif __name__ == \"__main__\":\n    test_content_length_on_get()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /reproduce_issue.py"
+    },
+    {
+        "step": 6,
+        "thought": "",
+        "action": "python /reproduce_issue.py",
+        "observation": "OBSERVATION:\nMethod: GET\nHeaders: {'Content-Length': '0'}\nContent-Length: 0\nISSUE REPRODUCED: Content-Length: 0 found on GET request."
+    },
+    {
+        "step": 7,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/requests/models.py  --view_range 260 300",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/requests/models.py:\n   260\t        #: request body to send to the server.\n   261\t        self.body = None\n   262\t        #: dictionary of callback hooks, for internal usage.\n   263\t        self.hooks = default_hooks()\n   264\t\n   265\t    def __repr__(self):\n   266\t        return '<PreparedRequest [%s]>' % (self.method)\n   267\t\n   268\t    def prepare_method(self, method):\n   269\t        \"\"\"Prepares the given HTTP method.\"\"\"\n   270\t        self.method = method\n   271\t        if self.method is not None:\n   272\t            self.method = self.method.upper()\n   273\t\n   274\t    def prepare_url(self, url, params):\n   275\t        \"\"\"Prepares the given HTTP URL.\"\"\"\n   276\t        #: Accept objects that have string representations.\n   277\t        try:\n   278\t            url = unicode(url)\n   279\t        except NameError:\n   280\t            # We're on Python 3.\n   281\t            url = str(url)\n   282\t        except UnicodeDecodeError:\n   283\t            pass\n   284\t\n   285\t        # Support for unicode domain names and paths.\n   286\t        scheme, netloc, path, _params, query, fragment = urlparse(url)\n   287\t\n   288\t        if not (scheme and netloc):\n   289\t            raise MissingSchema(\"Invalid URL %r: No schema supplied\" % url)\n   290\t\n   291\t        try:\n   292\t            netloc = netloc.encode('idna').decode('utf-8')\n   293\t        except UnicodeError:\n   294\t            raise InvalidURL('URL has an invalid label.')\n   295\t\n   296\t        # Bare domains aren't valid URLs.\n   297\t        if not path:\n   298\t            path = '/'\n   299\t\n   300\t        if is_py2:"
+    },
+    {
+        "step": 8,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/requests/models.py  --view_range 200 260",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/requests/models.py:\n   200\t        for (k, v) in list(hooks.items()):\n   201\t            self.register_hook(event=k, hook=v)\n   202\t\n   203\t        self.method = method\n   204\t        self.url = url\n   205\t        self.headers = headers\n   206\t        self.files = files\n   207\t        self.data = data\n   208\t        self.params = params\n   209\t        self.auth = auth\n   210\t        self.cookies = cookies\n   211\t        self.hooks = hooks\n   212\t\n   213\t    def __repr__(self):\n   214\t        return '<Request [%s]>' % (self.method)\n   215\t\n   216\t    def prepare(self):\n   217\t        \"\"\"Constructs a :class:`PreparedRequest <PreparedRequest>` for transmission and returns it.\"\"\"\n   218\t        p = PreparedRequest()\n   219\t\n   220\t        p.prepare_method(self.method)\n   221\t        p.prepare_url(self.url, self.params)\n   222\t        p.prepare_headers(self.headers)\n   223\t        p.prepare_cookies(self.cookies)\n   224\t        p.prepare_body(self.data, self.files)\n   225\t        # Note that prepare_auth must be last to enable authentication schemes\n   226\t        # such as OAuth to work on a fully prepared request.\n   227\t        p.prepare_auth(self.auth)\n   228\t        # This MUST go after prepare_auth. Authenticators could add a hook\n   229\t        p.prepare_hooks(self.hooks)\n   230\t\n   231\t        return p\n   232\t\n   233\t\n   234\tclass PreparedRequest(RequestEncodingMixin, RequestHooksMixin):\n   235\t    \"\"\"The fully mutable :class:`PreparedRequest <PreparedRequest>` object,\n   236\t    containing the exact bytes that will be sent to the server.\n   237\t\n   238\t    Generated from either a :class:`Request <Request>` object or manually.\n   239\t\n   240\t    Usage::\n   241\t\n   242\t      >>> import requests\n   243\t      >>> req = requests.Request('GET', 'http://httpbin.org/get')\n   244\t      >>> r = req.prepare()\n   245\t      <PreparedRequest [GET]>\n   246\t\n   247\t      >>> s = requests.Session()\n   248\t      >>> s.send(r)\n   249\t      <Response [200]>\n   250\t\n   251\t    \"\"\"\n   252\t\n   253\t    def __init__(self):\n   254\t        #: HTTP verb to send to the server.\n   255\t        self.method = None\n   256\t        #: HTTP URL to send the request to.\n   257\t        self.url = None\n   258\t        #: dictionary of HTTP headers.\n   259\t        self.headers = None\n   260\t        #: request body to send to the server."
+    },
+    {
+        "step": 9,
+        "thought": "",
+        "action": "str_replace_editor create /check_methods.py --file_text 'import requests\n\nmethods = ['\"'\"'GET'\"'\"', '\"'\"'POST'\"'\"', '\"'\"'PUT'\"'\"', '\"'\"'DELETE'\"'\"', '\"'\"'HEAD'\"'\"', '\"'\"'OPTIONS'\"'\"', '\"'\"'PATCH'\"'\"']\n\nfor method in methods:\n    req = requests.Request(method, '\"'\"'http://httpbin.org/'\"'\"' + method.lower())\n    prepared = req.prepare()\n    cl = prepared.headers.get('\"'\"'Content-Length'\"'\"')\n    print(f\"{method:7} Content-Length: {cl}\")\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /check_methods.py"
+    },
+    {
+        "step": 10,
+        "thought": "",
+        "action": "python /check_methods.py",
+        "observation": "OBSERVATION:\nGET     Content-Length: 0\nPOST    Content-Length: 0\nPUT     Content-Length: 0\nDELETE  Content-Length: 0\nHEAD    Content-Length: 0\nOPTIONS Content-Length: 0\nPATCH   Content-Length: 0"
+    },
+    {
+        "step": 11,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/requests/utils.py  --view_range 140 180",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/requests/utils.py:\n   140\t# From mitsuhiko/werkzeug (used with permission).\n   141\tdef parse_list_header(value):\n   142\t    \"\"\"Parse lists as described by RFC 2068 Section 2.\n   143\t\n   144\t    In particular, parse comma-separated lists where the elements of\n   145\t    the list may include quoted-strings.  A quoted-string could\n   146\t    contain a comma.  A non-quoted string could have quotes in the\n   147\t    middle.  Quotes are removed automatically after parsing.\n   148\t\n   149\t    It basically works like :func:`parse_set_header` just that items\n   150\t    may appear multiple times and case sensitivity is preserved.\n   151\t\n   152\t    The return value is a standard :class:`list`:\n   153\t\n   154\t    >>> parse_list_header('token, \"quoted value\"')\n   155\t    ['token', 'quoted value']\n   156\t\n   157\t    To create a header from the :class:`list` again, use the\n   158\t    :func:`dump_header` function.\n   159\t\n   160\t    :param value: a string with a list header.\n   161\t    :return: :class:`list`\n   162\t    \"\"\"\n   163\t    result = []\n   164\t    for item in _parse_list_header(value):\n   165\t        if item[:1] == item[-1:] == '\"':\n   166\t            item = unquote_header_value(item[1:-1])\n   167\t        result.append(item)\n   168\t    return result\n   169\t\n   170\t\n   171\t# From mitsuhiko/werkzeug (used with permission).\n   172\tdef parse_dict_header(value):\n   173\t    \"\"\"Parse lists of key, value pairs as described by RFC 2068 Section 2 and\n   174\t    convert them into a python dict:\n   175\t\n   176\t    >>> d = parse_dict_header('foo=\"is a fish\", bar=\"as well\"')\n   177\t    >>> type(d) is dict\n   178\t    True\n   179\t    >>> sorted(d.items())\n   180\t    [('bar', 'as well'), ('foo', 'is a fish')]"
+    },
+    {
+        "step": 12,
+        "thought": "",
+        "action": "grep -n \"def super_len\" /testbed/requests/utils.py",
+        "observation": "OBSERVATION:\n41:def super_len(o):"
+    },
+    {
+        "step": 13,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/requests/utils.py  --view_range 41 70",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/requests/utils.py:\n    41\tdef super_len(o):\n    42\t    if hasattr(o, '__len__'):\n    43\t        return len(o)\n    44\t    if hasattr(o, 'len'):\n    45\t        return o.len\n    46\t    if hasattr(o, 'fileno'):\n    47\t        return os.fstat(o.fileno()).st_size\n    48\t\n    49\tdef get_netrc_auth(url):\n    50\t    \"\"\"Returns the Requests tuple auth for a given url from netrc.\"\"\"\n    51\t\n    52\t    try:\n    53\t        locations = (os.path.expanduser('~/{0}'.format(f)) for f in NETRC_FILES)\n    54\t        netrc_path = None\n    55\t\n    56\t        for loc in locations:\n    57\t            if os.path.exists(loc) and not netrc_path:\n    58\t                netrc_path = loc\n    59\t\n    60\t        # Abort early if there isn't one.\n    61\t        if netrc_path is None:\n    62\t            return netrc_path\n    63\t\n    64\t        ri = urlparse(url)\n    65\t\n    66\t        # Strip port numbers from netloc\n    67\t        host = ri.netloc.split(':')[0]\n    68\t\n    69\t        try:\n    70\t            _netrc = netrc(netrc_path).authenticators(host)"
+    },
+    {
+        "step": 14,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/requests/models.py  --view_range 1 50",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/requests/models.py:\n     1\t# -*- coding: utf-8 -*-\n     2\t\n     3\t\"\"\"\n     4\trequests.models\n     5\t~~~~~~~~~~~~~~~\n     6\t\n     7\tThis module contains the primary objects that power Requests.\n     8\t\"\"\"\n     9\t\n    10\timport collections\n    11\timport logging\n    12\t\n    13\tfrom io import BytesIO\n    14\tfrom .hooks import default_hooks\n    15\tfrom .structures import CaseInsensitiveDict\n    16\tfrom .status_codes import codes\n    17\t\n    18\tfrom .auth import HTTPBasicAuth\n    19\tfrom .cookies import cookiejar_from_dict, get_cookie_header\n    20\tfrom .packages.urllib3.filepost import encode_multipart_formdata\n    21\tfrom .exceptions import HTTPError, RequestException, MissingSchema, InvalidURL\n    22\tfrom .utils import (\n    23\t    stream_untransfer, guess_filename, requote_uri,\n    24\t    stream_decode_response_unicode, to_key_val_list, parse_header_links,\n    25\t    iter_slices, guess_json_utf, super_len)\n    26\tfrom .compat import (\n    27\t    cookielib, urlparse, urlunparse, urlsplit, urlencode, str, bytes, StringIO,\n    28\t    is_py2, chardet, json, builtin_str, basestring)\n    29\t\n    30\tREDIRECT_STATI = (codes.moved, codes.found, codes.other, codes.temporary_moved)\n    31\tCONTENT_CHUNK_SIZE = 10 * 1024\n    32\tITER_CHUNK_SIZE = 512\n    33\t\n    34\tlog = logging.getLogger(__name__)\n    35\t\n    36\t\n    37\tclass RequestEncodingMixin(object):\n    38\t    @property\n    39\t    def path_url(self):\n    40\t        \"\"\"Build the path URL to use.\"\"\"\n    41\t\n    42\t        url = []\n    43\t\n    44\t        p = urlsplit(self.url)\n    45\t\n    46\t        path = p.path\n    47\t        if not path:\n    48\t            path = '/'\n    49\t\n    50\t        url.append(path)"
+    },
+    {
+        "step": 15,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/requests/models.py   --old_str '    def prepare_content_length(self, body):\n        self.headers['\"'\"'Content-Length'\"'\"'] = '\"'\"'0'\"'\"'\n        if hasattr(body, '\"'\"'seek'\"'\"') and hasattr(body, '\"'\"'tell'\"'\"'):\n            body.seek(0, 2)\n            self.headers['\"'\"'Content-Length'\"'\"'] = str(body.tell())\n            body.seek(0, 0)\n        elif body is not None:\n            self.headers['\"'\"'Content-Length'\"'\"'] = str(len(body))\n' --new_str '    def prepare_content_length(self, body):\n        if body is not None:\n            if hasattr(body, '\"'\"'seek'\"'\"') and hasattr(body, '\"'\"'tell'\"'\"'):\n                body.seek(0, 2)\n                self.headers['\"'\"'Content-Length'\"'\"'] = str(body.tell())\n                body.seek(0, 0)\n            else:\n                self.headers['\"'\"'Content-Length'\"'\"'] = str(len(body))\n        elif self.method not in ('\"'\"'GET'\"'\"', '\"'\"'HEAD'\"'\"'):\n            self.headers['\"'\"'Content-Length'\"'\"'] = '\"'\"'0'\"'\"'\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/requests/models.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/requests/models.py:\n   383\t            if (content_type) and (not 'content-type' in self.headers):\n   384\t                self.headers['Content-Type'] = content_type\n   385\t\n   386\t        self.body = body\n   387\t\n   388\t    def prepare_content_length(self, body):\n   389\t        if body is not None:\n   390\t            if hasattr(body, 'seek') and hasattr(body, 'tell'):\n   391\t                body.seek(0, 2)\n   392\t                self.headers['Content-Length'] = str(body.tell())\n   393\t                body.seek(0, 0)\n   394\t            else:\n   395\t                self.headers['Content-Length'] = str(len(body))\n   396\t        elif self.method not in ('GET', 'HEAD'):\n   397\t            self.headers['Content-Length'] = '0'\n   398\t\n   399\t    def prepare_auth(self, auth):\n   400\t        \"\"\"Prepares the given HTTP auth data.\"\"\"\n   401\t        if auth:\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 16,
+        "thought": "",
+        "action": "python /reproduce_issue.py",
+        "observation": "OBSERVATION:\n/testbed/requests/models.py:562: SyntaxWarning: \"is\" with a literal. Did you mean \"==\"?\n  if self.status_code is 0:\nMethod: GET\nHeaders: {}\nContent-Length not found in headers."
+    },
+    {
+        "step": 17,
+        "thought": "",
+        "action": "python /check_methods.py",
+        "observation": "OBSERVATION:\nGET     Content-Length: None\nPOST    Content-Length: 0\nPUT     Content-Length: 0\nDELETE  Content-Length: 0\nHEAD    Content-Length: None\nOPTIONS Content-Length: 0\nPATCH   Content-Length: 0"
+    },
+    {
+        "step": 18,
+        "thought": "",
+        "action": "str_replace_editor create /test_get_body.py --file_text 'import requests\n\ndef test_get_with_body():\n    req = requests.Request('\"'\"'GET'\"'\"', '\"'\"'http://httpbin.org/get'\"'\"', data='\"'\"'hello'\"'\"')\n    prepared = req.prepare()\n    print(f\"Method: {prepared.method}\")\n    print(f\"Body: {prepared.body}\")\n    print(f\"Headers: {prepared.headers}\")\n\nif __name__ == \"__main__\":\n    test_get_with_body()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_get_body.py"
+    },
+    {
+        "step": 19,
+        "thought": "",
+        "action": "python /test_get_body.py",
+        "observation": "OBSERVATION:\nMethod: GET\nBody: hello\nHeaders: {'Content-Length': '5'}"
+    },
+    {
+        "step": 20,
+        "thought": "",
+        "action": "str_replace_editor create /test_get_manual_cl.py --file_text 'import requests\n\ndef test_get_manual_cl():\n    req = requests.Request('\"'\"'GET'\"'\"', '\"'\"'http://httpbin.org/get'\"'\"', headers={'\"'\"'Content-Length'\"'\"': '\"'\"'0'\"'\"'})\n    prepared = req.prepare()\n    print(f\"Method: {prepared.method}\")\n    print(f\"Headers: {prepared.headers}\")\n\nif __name__ == \"__main__\":\n    test_get_manual_cl()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_get_manual_cl.py"
+    },
+    {
+        "step": 21,
+        "thought": "",
+        "action": "python /test_get_manual_cl.py",
+        "observation": "OBSERVATION:\nMethod: GET\nHeaders: {'Content-Length': '0'}"
+    },
+    {
+        "step": 22,
+        "thought": "",
+        "action": "str_replace_editor create /test_post_no_body.py --file_text 'import requests\n\ndef test_post_no_body():\n    req = requests.Request('\"'\"'POST'\"'\"', '\"'\"'http://httpbin.org/post'\"'\"')\n    prepared = req.prepare()\n    print(f\"Method: {prepared.method}\")\n    print(f\"Headers: {prepared.headers}\")\n\nif __name__ == \"__main__\":\n    test_post_no_body()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_post_no_body.py"
+    },
+    {
+        "step": 23,
+        "thought": "",
+        "action": "python /test_post_no_body.py",
+        "observation": "OBSERVATION:\nMethod: POST\nHeaders: {'Content-Length': '0'}"
+    },
+    {
+        "step": 24,
+        "thought": "",
+        "action": "grep -n \"Content-Length\" /testbed/requests/sessions.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 25,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/requests/adapters.py  --view_range 150 170",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/requests/adapters.py:\n   150\t        \"\"\"Sends PreparedRequest object. Returns Response object.\"\"\"\n   151\t\n   152\t        conn = self.get_connection(request.url, proxies)\n   153\t\n   154\t        self.cert_verify(conn, request.url, verify, cert)\n   155\t        url = self.request_url(request, proxies)\n   156\t\n   157\t        chunked = not (request.body is None or 'Content-Length' in request.headers)\n   158\t\n   159\t        try:\n   160\t            if not chunked:\n   161\t                resp = conn.urlopen(\n   162\t                    method=request.method,\n   163\t                    url=url,\n   164\t                    body=request.body,\n   165\t                    headers=request.headers,\n   166\t                    redirect=False,\n   167\t                    assert_same_host=False,\n   168\t                    preload_content=False,\n   169\t                    decode_content=False,\n   170\t                    retries=self.max_retries,"
+    },
+    {
+        "step": 26,
+        "thought": "",
+        "action": "str_replace_editor create /test_get_gen.py --file_text 'import requests\n\ndef gen():\n    yield b'\"'\"'hi'\"'\"'\n\ndef test_get_generator():\n    req = requests.Request('\"'\"'GET'\"'\"', '\"'\"'http://httpbin.org/get'\"'\"', data=gen())\n    prepared = req.prepare()\n    print(f\"Method: {prepared.method}\")\n    print(f\"Headers: {prepared.headers}\")\n\nif __name__ == \"__main__\":\n    test_get_generator()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_get_gen.py"
+    },
+    {
+        "step": 27,
+        "thought": "",
+        "action": "python /test_get_gen.py",
+        "observation": "OBSERVATION:\nMethod: GET\nHeaders: {'Content-Length': 'None'}"
+    },
+    {
+        "step": 28,
+        "thought": "",
+        "action": "str_replace_editor create /test_super_len.py --file_text 'from requests.utils import super_len\ndef gen():\n    yield b'\"'\"'a'\"'\"'\n\nprint(f\"super_len(gen()): {super_len(gen())}\")\nprint(f\"str(super_len(gen())): {str(super_len(gen()))}\")\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_super_len.py"
+    },
+    {
+        "step": 29,
+        "thought": "",
+        "action": "python /test_super_len.py",
+        "observation": "OBSERVATION:\nsuper_len(gen()): None\nstr(super_len(gen())): None"
+    },
+    {
+        "step": 30,
+        "thought": "",
+        "action": "str_replace_editor undo_edit /testbed/requests/models.py",
+        "observation": "OBSERVATION:\nNo edit history found for /testbed/requests/models.py."
+    },
+    {
+        "step": 31,
+        "thought": "",
+        "action": "str_replace_editor create /test_post_gen.py --file_text 'import requests\n\ndef gen():\n    yield b'\"'\"'hi'\"'\"'\n\ndef test_post_generator():\n    req = requests.Request('\"'\"'POST'\"'\"', '\"'\"'http://httpbin.org/post'\"'\"', data=gen())\n    prepared = req.prepare()\n    print(f\"Method: {prepared.method}\")\n    print(f\"Headers: {prepared.headers}\")\n\nif __name__ == \"__main__\":\n    test_post_generator()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_post_gen.py"
+    },
+    {
+        "step": 32,
+        "thought": "",
+        "action": "python /test_post_gen.py",
+        "observation": "OBSERVATION:\nMethod: POST\nHeaders: {'Content-Length': 'None'}"
+    },
+    {
+        "step": 33,
+        "thought": "",
+        "action": "python /reproduce_issue.py",
+        "observation": "OBSERVATION:\nMethod: GET\nHeaders: {}\nContent-Length not found in headers."
+    },
+    {
+        "step": 34,
+        "thought": "",
+        "action": "str_replace_editor create /test_get_params.py --file_text 'import requests\n\ndef test_get_with_params_in_data():\n    req = requests.Request('\"'\"'GET'\"'\"', '\"'\"'http://httpbin.org/get'\"'\"', data={'\"'\"'a'\"'\"': '\"'\"'1'\"'\"'})\n    prepared = req.prepare()\n    print(f\"Method: {prepared.method}\")\n    print(f\"Body: {prepared.body}\")\n    print(f\"Headers: {prepared.headers}\")\n\nif __name__ == \"__main__\":\n    test_get_with_params_in_data()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_get_params.py"
+    },
+    {
+        "step": 35,
+        "thought": "",
+        "action": "python /test_get_params.py",
+        "observation": "OBSERVATION:\nMethod: GET\nBody: a=1\nHeaders: {'Content-Length': '3', 'Content-Type': 'application/x-www-form-urlencoded'}"
+    },
+    {
+        "step": 36,
+        "thought": "",
+        "action": "str_replace_editor create /test_head_no_body.py --file_text 'import requests\n\ndef test_head_no_body():\n    req = requests.Request('\"'\"'HEAD'\"'\"', '\"'\"'http://httpbin.org/get'\"'\"')\n    prepared = req.prepare()\n    print(f\"Method: {prepared.method}\")\n    print(f\"Headers: {prepared.headers}\")\n\nif __name__ == \"__main__\":\n    test_head_no_body()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_head_no_body.py"
+    },
+    {
+        "step": 37,
+        "thought": "",
+        "action": "python /test_head_no_body.py",
+        "observation": "OBSERVATION:\nMethod: HEAD\nHeaders: {}"
+    },
+    {
+        "step": 38,
+        "thought": "",
+        "action": "str_replace_editor create /test_delete_no_body.py --file_text 'import requests\n\ndef test_delete_no_body():\n    req = requests.Request('\"'\"'DELETE'\"'\"', '\"'\"'http://httpbin.org/delete'\"'\"')\n    prepared = req.prepare()\n    print(f\"Method: {prepared.method}\")\n    print(f\"Headers: {prepared.headers}\")\n\nif __name__ == \"__main__\":\n    test_delete_no_body()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_delete_no_body.py"
+    },
+    {
+        "step": 39,
+        "thought": "",
+        "action": "python /test_delete_no_body.py",
+        "observation": "OBSERVATION:\nMethod: DELETE\nHeaders: {'Content-Length': '0'}"
+    },
+    {
+        "step": 40,
+        "thought": "",
+        "action": "str_replace_editor create /test_remove_cl.py --file_text 'import requests\n\ndef test_remove_cl():\n    req = requests.Request('\"'\"'POST'\"'\"', '\"'\"'http://httpbin.org/post'\"'\"', headers={'\"'\"'Content-Length'\"'\"': None})\n    prepared = req.prepare()\n    print(f\"Method: {prepared.method}\")\n    print(f\"Headers: {prepared.headers}\")\n\nif __name__ == \"__main__\":\n    test_remove_cl()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_remove_cl.py"
+    },
+    {
+        "step": 41,
+        "thought": "",
+        "action": "python /test_remove_cl.py",
+        "observation": "OBSERVATION:\nMethod: POST\nHeaders: {'Content-Length': '0'}"
+    },
+    {
+        "step": 42,
+        "thought": "",
+        "action": "str_replace_editor create /test_remove_cl_get.py --file_text 'import requests\n\ndef test_remove_cl_get():\n    req = requests.Request('\"'\"'GET'\"'\"', '\"'\"'http://httpbin.org/get'\"'\"', headers={'\"'\"'Content-Length'\"'\"': None})\n    prepared = req.prepare()\n    print(f\"Method: {prepared.method}\")\n    print(f\"Headers: {prepared.headers}\")\n\nif __name__ == \"__main__\":\n    test_remove_cl_get()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_remove_cl_get.py"
+    },
+    {
+        "step": 43,
+        "thought": "",
+        "action": "python /test_remove_cl_get.py",
+        "observation": "OBSERVATION:\nMethod: GET\nHeaders: {'Content-Length': None}"
+    },
+    {
+        "step": 44,
+        "thought": "",
+        "action": "str_replace_editor create /test_get_gen_2.py --file_text 'import requests\n\ndef gen():\n    yield b'\"'\"'hi'\"'\"'\n\ndef test_get_gen():\n    req = requests.Request('\"'\"'GET'\"'\"', '\"'\"'http://httpbin.org/get'\"'\"', data=gen())\n    prepared = req.prepare()\n    print(f\"Method: {prepared.method}\")\n    print(f\"Headers: {prepared.headers}\")\n\nif __name__ == \"__main__\":\n    test_get_gen()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_get_gen_2.py"
+    },
+    {
+        "step": 45,
+        "thought": "",
+        "action": "python /test_get_gen_2.py",
+        "observation": "OBSERVATION:\nMethod: GET\nHeaders: {'Content-Length': 'None'}"
+    },
+    {
+        "step": 46,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/requests/models.py   --old_str '        try:\n            length = str(super_len(data))\n        except (TypeError, AttributeError):\n            length = False\n\n        if is_stream:\n' --new_str '        try:\n            length = super_len(data)\n        except (TypeError, AttributeError):\n            length = None\n\n        if length is not None:\n            length = str(length)\n\n        if is_stream:\n'",
+        "observation": "OBSERVATION:\nThe file /testbed/requests/models.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/requests/models.py:\n   345\t            hasattr(data, '__iter__'),\n   346\t            not isinstance(data, basestring),\n   347\t            not isinstance(data, dict)\n   348\t        ])\n   349\t\n   350\t        try:\n   351\t            length = super_len(data)\n   352\t        except (TypeError, AttributeError):\n   353\t            length = None\n   354\t\n   355\t        if length is not None:\n   356\t            length = str(length)\n   357\t\n   358\t        if is_stream:\n   359\t            body = data\n   360\t\n   361\t            if files:\n   362\t                raise NotImplementedError('Streamed bodies and files are mutually exclusive.')\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 47,
+        "thought": "",
+        "action": "python /test_get_gen_2.py",
+        "observation": "OBSERVATION:\n/testbed/requests/models.py:565: SyntaxWarning: \"is\" with a literal. Did you mean \"==\"?\n  if self.status_code is 0:\nMethod: GET\nHeaders: {'Transfer-Encoding': 'chunked'}"
+    },
+    {
+        "step": 48,
+        "thought": "",
+        "action": "python /test_post_gen.py",
+        "observation": "OBSERVATION:\nMethod: POST\nHeaders: {'Transfer-Encoding': 'chunked'}"
+    },
+    {
+        "step": 49,
+        "thought": "",
+        "action": "python /reproduce_issue.py",
+        "observation": "OBSERVATION:\nMethod: GET\nHeaders: {}\nContent-Length not found in headers."
+    },
+    {
+        "step": 50,
+        "thought": "",
+        "action": "python /test_get_params.py",
+        "observation": "OBSERVATION:\nMethod: GET\nBody: a=1\nHeaders: {'Content-Length': '3', 'Content-Type': 'application/x-www-form-urlencoded'}"
+    },
+    {
+        "step": 51,
+        "thought": "",
+        "action": "str_replace_editor create /test_get_file.py --file_text 'import requests\nimport os\n\ndef test_get_file():\n    with open('\"'\"'testfile.txt'\"'\"', '\"'\"'w'\"'\"') as f:\n        f.write('\"'\"'hello world'\"'\"')\n    \n    try:\n        with open('\"'\"'testfile.txt'\"'\"', '\"'\"'rb'\"'\"') as f:\n            req = requests.Request('\"'\"'GET'\"'\"', '\"'\"'http://httpbin.org/get'\"'\"', data=f)\n            prepared = req.prepare()\n            print(f\"Method: {prepared.method}\")\n            print(f\"Headers: {prepared.headers}\")\n    finally:\n        if os.path.exists('\"'\"'testfile.txt'\"'\"'):\n            os.remove('\"'\"'testfile.txt'\"'\"')\n\nif __name__ == \"__main__\":\n    test_get_file()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_get_file.py"
+    },
+    {
+        "step": 52,
+        "thought": "",
+        "action": "python /test_get_file.py",
+        "observation": "OBSERVATION:\nMethod: GET\nHeaders: {'Content-Length': '11'}"
+    },
+    {
+        "step": 53,
+        "thought": "",
+        "action": "str_replace_editor create /test_get_empty_file.py --file_text 'import requests\nimport os\n\ndef test_get_empty_file():\n    with open('\"'\"'emptyfile.txt'\"'\"', '\"'\"'w'\"'\"') as f:\n        pass\n    \n    try:\n        with open('\"'\"'emptyfile.txt'\"'\"', '\"'\"'rb'\"'\"') as f:\n            req = requests.Request('\"'\"'GET'\"'\"', '\"'\"'http://httpbin.org/get'\"'\"', data=f)\n            prepared = req.prepare()\n            print(f\"Method: {prepared.method}\")\n            print(f\"Headers: {prepared.headers}\")\n    finally:\n        if os.path.exists('\"'\"'emptyfile.txt'\"'\"'):\n            os.remove('\"'\"'emptyfile.txt'\"'\"')\n\nif __name__ == \"__main__\":\n    test_get_empty_file()\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /test_get_empty_file.py"
+    },
+    {
+        "step": 54,
+        "thought": "",
+        "action": "python /test_get_empty_file.py",
+        "observation": "OBSERVATION:\nMethod: GET\nHeaders: {'Content-Length': '0'}"
+    },
+    {
+        "step": 55,
+        "thought": "",
+        "action": "python /test_get_gen_2.py",
+        "observation": "OBSERVATION:\nMethod: GET\nHeaders: {'Transfer-Encoding': 'chunked'}"
+    },
+    {
+        "step": 56,
+        "thought": "",
+        "action": "python /reproduce_issue.py && python /test_get_body.py && python /test_get_manual_cl.py && python /test_post_no_body.py && python /test_get_gen_2.py && python /test_post_gen.py && python /test_get_file.py && python /test_get_empty_file.py",
+        "observation": "OBSERVATION:\nMethod: GET\nHeaders: {}\nContent-Length not found in headers.\nMethod: GET\nBody: hello\nHeaders: {'Content-Length': '5'}\nMethod: GET\nHeaders: {'Content-Length': '0'}\nMethod: POST\nHeaders: {'Content-Length': '0'}\nMethod: GET\nHeaders: {'Transfer-Encoding': 'chunked'}\nMethod: POST\nHeaders: {'Transfer-Encoding': 'chunked'}\nMethod: GET\nHeaders: {'Content-Length': '11'}\nMethod: GET\nHeaders: {'Content-Length': '0'}"
+    },
+    {
+        "step": 57,
+        "thought": "",
+        "action": "rm /reproduce_issue.py /check_methods.py /test_get_body.py /test_get_manual_cl.py /test_post_no_body.py /test_get_gen_2.py /test_post_gen.py /test_get_file.py /test_get_empty_file.py /test_get_params.py /test_super_len.py /test_remove_cl.py /test_remove_cl_get.py /test_head_no_body.py /test_delete_no_body.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 58,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\ndiff --git a/requests/models.py b/requests/models.py\nindex 9926045..174680a 100644\n--- a/requests/models.py\n+++ b/requests/models.py\n@@ -348,9 +348,12 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):\n         ])\n \n         try:\n-            length = str(super_len(data))\n+            length = super_len(data)\n         except (TypeError, AttributeError):\n-            length = False\n+            length = None\n+\n+        if length is not None:\n+            length = str(length)\n \n         if is_stream:\n             body = data\n@@ -386,13 +389,15 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):\n         self.body = body\n \n     def prepare_content_length(self, body):\n-        self.headers['Content-Length'] = '0'\n-        if hasattr(body, 'seek') and hasattr(body, 'tell'):\n-            body.seek(0, 2)\n-            self.headers['Content-Length'] = str(body.tell())\n-            body.seek(0, 0)\n-        elif body is not None:\n-            self.headers['Content-Length'] = str(len(body))\n+        if body is not None:\n+            if hasattr(body, 'seek') and hasattr(body, 'tell'):\n+                body.seek(0, 2)\n+                self.headers['Content-Length'] = str(body.tell())\n+                body.seek(0, 0)\n+            else:\n+                self.headers['Content-Length'] = str(len(body))\n+        elif self.method not in ('GET', 'HEAD'):\n+            self.headers['Content-Length'] = '0'\n \n     def prepare_auth(self, auth):\n         \"\"\"Prepares the given HTTP auth data.\"\"\""
+    }
+]

@@ -1,0 +1,206 @@
+[
+    {
+        "step": 1,
+        "thought": "",
+        "action": "find /testbed -name \"*text.py*\"",
+        "observation": "OBSERVATION:\n/testbed/sklearn/feature_extraction/tests/test_text.py\n/testbed/sklearn/feature_extraction/text.py"
+    },
+    {
+        "step": 2,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/reproduce_issue.py --file_text 'from sklearn.feature_extraction.text import strip_accents_unicode\n\n# This string contains one code point, \"LATIN SMALL LETTER N WITH TILDE\"\ns1 = chr(241)\n\n# This string contains two code points, \"LATIN SMALL LETTER N\" followed by \"COMBINING TILDE\"\ns2 = chr(110) + chr(771)\n\n# They are visually identical, as expected\nprint(f\"s1: {s1}\") \nprint(f\"s2: {s2}\")\n\n# The tilde is removed from s1, as expected\nstripped_s1 = strip_accents_unicode(s1)\nprint(f\"stripped_s1: {stripped_s1}\")\n\n# But strip_accents_unicode returns s2 unchanged\nstripped_s2 = strip_accents_unicode(s2)\nprint(f\"stripped_s2: {stripped_s2}\")\n\nassert stripped_s1 == \"n\", f\"Expected '\"'\"'n'\"'\"', got '\"'\"'{stripped_s1}'\"'\"'\"\nassert stripped_s2 == \"n\", f\"Expected '\"'\"'n'\"'\"', got '\"'\"'{stripped_s2}'\"'\"'\"\nprint(\"Reproduction successful!\")\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/reproduce_issue.py"
+    },
+    {
+        "step": 3,
+        "thought": "",
+        "action": "timeout 90s python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\ns1: ñ\ns2: ñ\nstripped_s1: n\nstripped_s2: ñ\nTraceback (most recent call last):\n  File \"/testbed/reproduce_issue.py\", line 22, in <module>\n    assert stripped_s2 == \"n\", f\"Expected 'n', got '{stripped_s2}'\"\nAssertionError: Expected 'n', got 'ñ'"
+    },
+    {
+        "step": 4,
+        "thought": "",
+        "action": "run_hunter_trace /testbed/reproduce_issue.py sklearn/feature_extraction/text strip_accents_unicode 10",
+        "observation": "OBSERVATION:\nThis analysis examines the execution flow of `strip_accents_unicode` within the scikit-learn library, comparing how it handles an NFC-encoded character ('ñ') versus an NFD-encoded character ('n' + '̃').\n\n### 1. Initial Representation\n*   **Input s1:** `'ñ'` (Latin Small Letter N with Tilde - `\\u00f1`)\n*   **Input s2:** `'ñ'` (Latin Small Letter N + Combining Tilde - `\\u006e\\u0303`)\n\n---\n\n### 2. Top-Level Call\nThe process is initiated by calling `strip_accents_unicode(s)` from the reproduction script.\n\n---\n\n### 3. Execution Tree\n\n#### **Scenario A: Processing NFC String (s1: 'ñ')**\n```text\n(1) Call: strip_accents_unicode(s='ñ')\n│   │   (Line 114 in sklearn/feature_extraction/text.py)\n│   │\n├───(2) Logic: Check if string needs normalization/stripping\n│       (Internal check fails to trigger early return at line 134)\n│\n├───(3) Call: <listcomp> (Line 136)\n│   │   (Iterates over normalized characters)\n│   │   ├───(4) Process 'n' (Base char): Kept\n│   │   └───(5) Process '̃' (Combining mark): Filtered out\n│   │   (Detailed log shows: .0=<str_iterator object>)\n│   │\n├───(6) Return from <listcomp>: ['n']\n│\n└───(7) Return from strip_accents_unicode: 'n'\n```\n\n#### **Scenario B: Processing NFD String (s2: 'ñ')**\n```text\n(1) Call: strip_accents_unicode(s='ñ')\n│   │   (Line 114 in sklearn/feature_extraction/text.py)\n│   │\n├───(2) Shortcut Logic: check unicodedata.combining(s) \n│       (Line 134 triggers a return because the string format \n│        satisfied an early exit condition incorrectly)\n│\n└───(3) Return (Early Exit): 'ñ' \n        (Line 134: Returns original string without entering listcomp)\n```\n\n---\n\n### 4. Final Output\n*   **Processed s1:** `'n'` (Success)\n*   **Processed s2:** `'ñ'` (Failure: Accents not stripped)\n\n---\n\n### 5. Key Function Analysis\n\n| Function | Location (Log) | Functional Boundary | Role in this Workflow |\n| :--- | :--- | :--- | :--- |\n| **`strip_accents_unicode`** | `text.py:114` | High-level API for Unicode accent removal. | Orchestrates the normalization and filtering process for input strings. |\n| **`<listcomp>`** | `text.py:136` | Character-level filtering logic. | Iterates through the decomposed Unicode characters and removes those identified as combining marks (accents). |\n\n---\n\n### 6. Workflow Introduction\nThe `strip_accents_unicode` function is designed to transform accented Unicode characters into their base ASCII-equivalent forms. The process generally involves two main phases:\n\n1.  **Normalization & Detection:** The function checks if the input string contains combining characters. It typically aims to normalize strings into **NFKD** (Compatibility Decomposition), which separates a character like `ñ` into a base `n` and a standalone tilde `~`.\n2.  **Filtering:** It uses a list comprehension (or similar loop) to iterate through the decomposed characters, discarding any that have \"combining\" properties (specifically those in the Unicode 'Mn' category).\n\n**The Reproduced Issue:**\nAs shown in the trace, when the input is already decomposed (**s2**), the function hits an **early return logic at line 134**. Because it perceives the string as \"already processed\" or incorrectly handles the `TypeError` resulting from calling `unicodedata.combining()` on a multi-character string, it returns the input unchanged. Conversely, for the single-character **s1**, it bypasses the shortcut, proceeds to the filtering logic at line 136, and successfully strips the accent."
+    },
+    {
+        "step": 5,
+        "thought": "",
+        "action": "str_replace_editor view /testbed/sklearn/feature_extraction/text.py  --view_range 114 150",
+        "observation": "OBSERVATION:\nHere's the result of running `cat -n` on /testbed/sklearn/feature_extraction/text.py:\n   114\tdef strip_accents_unicode(s):\n   115\t    \"\"\"Transform accentuated unicode symbols into their simple counterpart\n   116\t\n   117\t    Warning: the python-level loop and join operations make this\n   118\t    implementation 20 times slower than the strip_accents_ascii basic\n   119\t    normalization.\n   120\t\n   121\t    Parameters\n   122\t    ----------\n   123\t    s : string\n   124\t        The string to strip\n   125\t\n   126\t    See also\n   127\t    --------\n   128\t    strip_accents_ascii\n   129\t        Remove accentuated char for any unicode symbol that has a direct\n   130\t        ASCII equivalent.\n   131\t    \"\"\"\n   132\t    normalized = unicodedata.normalize('NFKD', s)\n   133\t    if normalized == s:\n   134\t        return s\n   135\t    else:\n   136\t        return ''.join([c for c in normalized if not unicodedata.combining(c)])\n   137\t\n   138\t\n   139\tdef strip_accents_ascii(s):\n   140\t    \"\"\"Transform accentuated unicode symbols into ascii or nothing\n   141\t\n   142\t    Warning: this solution is only suited for languages that have a direct\n   143\t    transliteration to ASCII symbols.\n   144\t\n   145\t    Parameters\n   146\t    ----------\n   147\t    s : string\n   148\t        The string to strip\n   149\t\n   150\t    See also"
+    },
+    {
+        "step": 6,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/test_edge_cases.py --file_text 'import unicodedata\nfrom sklearn.feature_extraction.text import strip_accents_unicode\n\ndef test(s, name):\n    print(f\"Testing {name}: {s!r}\")\n    normalized = unicodedata.normalize('\"'\"'NFKD'\"'\"', s)\n    print(f\"  NFKD: {normalized!r}\")\n    print(f\"  NFKD == s: {normalized == s}\")\n    stripped = strip_accents_unicode(s)\n    print(f\"  Stripped: {stripped!r}\")\n\ntest(\"abc\", \"plain ascii\")\ntest(chr(241), \"n with tilde (NFC)\")\ntest(chr(110) + chr(771), \"n + combining tilde (NFD)\")\ntest(\"a\" + chr(771) + \"b\", \"a with tilde + b (NFD)\")\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_edge_cases.py"
+    },
+    {
+        "step": 7,
+        "thought": "",
+        "action": "timeout 90s python /testbed/test_edge_cases.py",
+        "observation": "OBSERVATION:\nTesting plain ascii: 'abc'\n  NFKD: 'abc'\n  NFKD == s: True\n  Stripped: 'abc'\nTesting n with tilde (NFC): 'ñ'\n  NFKD: 'ñ'\n  NFKD == s: False\n  Stripped: 'n'\nTesting n + combining tilde (NFD): 'ñ'\n  NFKD: 'ñ'\n  NFKD == s: True\n  Stripped: 'ñ'\nTesting a with tilde + b (NFD): 'ãb'\n  NFKD: 'ãb'\n  NFKD == s: True\n  Stripped: 'ãb'"
+    },
+    {
+        "step": 8,
+        "thought": "",
+        "action": "str_replace_editor create /testbed/test_fix.py --file_text 'import unicodedata\n\ndef strip_accents_unicode_fixed(s):\n    normalized = unicodedata.normalize('\"'\"'NFKD'\"'\"', s)\n    return '\"'\"''\"'\"'.join([c for c in normalized if not unicodedata.combining(c)])\n\n# This string contains one code point, \"LATIN SMALL LETTER N WITH TILDE\"\ns1 = chr(241)\n\n# This string contains two code points, \"LATIN SMALL LETTER N\" followed by \"COMBINING TILDE\"\ns2 = chr(110) + chr(771)\n\nprint(f\"s1: {s1!r}\")\nprint(f\"s2: {s2!r}\")\n\nstripped_s1 = strip_accents_unicode_fixed(s1)\nprint(f\"stripped_s1: {stripped_s1!r}\")\n\nstripped_s2 = strip_accents_unicode_fixed(s2)\nprint(f\"stripped_s2: {stripped_s2!r}\")\n\nassert stripped_s1 == \"n\"\nassert stripped_s2 == \"n\"\nprint(\"Fixed!\")\n'",
+        "observation": "OBSERVATION:\nFile created successfully at: /testbed/test_fix.py"
+    },
+    {
+        "step": 9,
+        "thought": "",
+        "action": "timeout 90s python /testbed/test_fix.py",
+        "observation": "OBSERVATION:\ns1: 'ñ'\ns2: 'ñ'\nstripped_s1: 'n'\nstripped_s2: 'n'\nFixed!"
+    },
+    {
+        "step": 10,
+        "thought": "",
+        "action": "grep -r \"strip_accents_unicode\" /testbed/sklearn/feature_extraction/text.py",
+        "observation": "OBSERVATION:\n           'strip_accents_unicode',\ndef strip_accents_unicode(s):\n    strip_accents_unicode\n            strip_accents = strip_accents_unicode"
+    },
+    {
+        "step": 11,
+        "thought": "",
+        "action": "python --version",
+        "observation": "OBSERVATION:\nPython 3.6.13 :: Anaconda, Inc."
+    },
+    {
+        "step": 12,
+        "thought": "",
+        "action": "python -c \"import sklearn; print(sklearn.__version__)\"",
+        "observation": "OBSERVATION:\n0.22.dev0"
+    },
+    {
+        "step": 13,
+        "thought": "",
+        "action": "pytest /testbed/sklearn/feature_extraction/tests/test_text.py",
+        "observation": "OBSERVATION:\n============================= test session starts ==============================\nplatform linux -- Python 3.6.13, pytest-6.2.4, py-1.11.0, pluggy-0.13.1\nrootdir: /testbed, configfile: setup.cfg\ncollecting ... \rcollecting 0 items                                                             \rcollected 111 items                                                            \n\nsklearn/feature_extraction/tests/test_text.py .......................... [ 23%]\n......................................x.........x..x..............x..... [ 88%]\n.............                                                            [100%]\n\n================== 107 passed, 4 xfailed, 5 warnings in 5.20s =================="
+    },
+    {
+        "step": 14,
+        "thought": "",
+        "action": "grep -r \"unicodedata.normalize\" /testbed/sklearn",
+        "observation": "OBSERVATION:\ngrep: /testbed/sklearn/feature_extraction/__pycache__/text.cpython-36.pyc: binary file matches\n/testbed/sklearn/feature_extraction/text.py:    normalized = unicodedata.normalize('NFKD', s)\n/testbed/sklearn/feature_extraction/text.py:    nkfd_form = unicodedata.normalize('NFKD', s)\n/testbed/sklearn/feature_extraction/text.py:        :func:`unicodedata.normalize`.\n/testbed/sklearn/feature_extraction/text.py:        :func:`unicodedata.normalize`.\n/testbed/sklearn/feature_extraction/text.py:        :func:`unicodedata.normalize`."
+    },
+    {
+        "step": 15,
+        "thought": "",
+        "action": "head -n 20 /testbed/sklearn/feature_extraction/text.py",
+        "observation": "OBSERVATION:\n# -*- coding: utf-8 -*-\n# Authors: Olivier Grisel <olivier.grisel@ensta.org>\n#          Mathieu Blondel <mathieu@mblondel.org>\n#          Lars Buitinck\n#          Robert Layton <robertlayton@gmail.com>\n#          Jochen Wersdörfer <jochen@wersdoerfer.de>\n#          Roman Sinayev <roman.sinayev@gmail.com>\n#\n# License: BSD 3 clause\n\"\"\"\nThe :mod:`sklearn.feature_extraction.text` submodule gathers utilities to\nbuild feature vectors from text documents.\n\"\"\"\n\nimport array\nfrom collections import defaultdict\nfrom collections.abc import Mapping\nfrom functools import partial\nimport numbers\nfrom operator import itemgetter"
+    },
+    {
+        "step": 16,
+        "thought": "",
+        "action": "grep \"import unicodedata\" /testbed/sklearn/feature_extraction/text.py",
+        "observation": "OBSERVATION:\nimport unicodedata"
+    },
+    {
+        "step": 17,
+        "thought": "",
+        "action": "str_replace_editor str_replace /testbed/sklearn/feature_extraction/text.py   --old_str '    normalized = unicodedata.normalize('\"'\"'NFKD'\"'\"', s)\n    if normalized == s:\n        return s\n    else:\n        return '\"'\"''\"'\"'.join([c for c in normalized if not unicodedata.combining(c)])' --new_str '    normalized = unicodedata.normalize('\"'\"'NFKD'\"'\"', s)\n    return '\"'\"''\"'\"'.join([c for c in normalized if not unicodedata.combining(c)])'",
+        "observation": "OBSERVATION:\nThe file /testbed/sklearn/feature_extraction/text.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/sklearn/feature_extraction/text.py:\n   127\t    --------\n   128\t    strip_accents_ascii\n   129\t        Remove accentuated char for any unicode symbol that has a direct\n   130\t        ASCII equivalent.\n   131\t    \"\"\"\n   132\t    normalized = unicodedata.normalize('NFKD', s)\n   133\t    return ''.join([c for c in normalized if not unicodedata.combining(c)])\n   134\t\n   135\t\n   136\tdef strip_accents_ascii(s):\nReview the changes and make sure they are as expected. Edit the file again if necessary."
+    },
+    {
+        "step": 18,
+        "thought": "",
+        "action": "timeout 90s python /testbed/reproduce_issue.py",
+        "observation": "OBSERVATION:\ns1: ñ\ns2: ñ\nstripped_s1: n\nstripped_s2: n\nReproduction successful!"
+    },
+    {
+        "step": 19,
+        "thought": "",
+        "action": "timeout 90s python /testbed/test_edge_cases.py",
+        "observation": "OBSERVATION:\nTesting plain ascii: 'abc'\n  NFKD: 'abc'\n  NFKD == s: True\n  Stripped: 'abc'\nTesting n with tilde (NFC): 'ñ'\n  NFKD: 'ñ'\n  NFKD == s: False\n  Stripped: 'n'\nTesting n + combining tilde (NFD): 'ñ'\n  NFKD: 'ñ'\n  NFKD == s: True\n  Stripped: 'n'\nTesting a with tilde + b (NFD): 'ãb'\n  NFKD: 'ãb'\n  NFKD == s: True\n  Stripped: 'ab'"
+    },
+    {
+        "step": 20,
+        "thought": "",
+        "action": "python -c \"import unicodedata; from sklearn.feature_extraction.text import strip_accents_unicode; s = '\\ufb01'; print(f'Input: {s!r}'); print(f'Stripped: {strip_accents_unicode(s)!r}')\"",
+        "observation": "OBSERVATION:\nbash: !r}': event not found"
+    },
+    {
+        "step": 21,
+        "thought": "",
+        "action": "python -c \"import unicodedata; from sklearn.feature_extraction.text import strip_accents_unicode; s = '\\ufb01'; print('Input: %r' % s); print('Stripped: %r' % strip_accents_unicode(s))\"",
+        "observation": "OBSERVATION:\nInput: 'ﬁ'\nStripped: 'fi'"
+    },
+    {
+        "step": 22,
+        "thought": "",
+        "action": "pytest /testbed/sklearn/feature_extraction/tests/test_text.py",
+        "observation": "OBSERVATION:\n============================= test session starts ==============================\nplatform linux -- Python 3.6.13, pytest-6.2.4, py-1.11.0, pluggy-0.13.1\nrootdir: /testbed, configfile: setup.cfg\ncollecting ... \rcollected 111 items                                                            \n\nsklearn/feature_extraction/tests/test_text.py .......................... [ 23%]\n......................................x.........x..x..............x..... [ 88%]\n.............                                                            [100%]\n\n================== 107 passed, 4 xfailed, 5 warnings in 1.34s =================="
+    },
+    {
+        "step": 23,
+        "thought": "",
+        "action": "pytest /testbed/sklearn/feature_extraction/",
+        "observation": "OBSERVATION:\n============================= test session starts ==============================\nplatform linux -- Python 3.6.13, pytest-6.2.4, py-1.11.0, pluggy-0.13.1\nrootdir: /testbed, configfile: setup.cfg\ncollecting ... \rcollecting 8 items                                                             \rcollected 177 items                                                            \n\nsklearn/feature_extraction/dict_vectorizer.py ..                         [  1%]\nsklearn/feature_extraction/hashing.py .                                  [  1%]\nsklearn/feature_extraction/image.py ..                                   [  2%]\nsklearn/feature_extraction/text.py ...                                   [  4%]\nsklearn/feature_extraction/tests/test_dict_vectorizer.py ............... [ 12%]\n.............                                                            [ 20%]\nsklearn/feature_extraction/tests/test_feature_hasher.py ..........       [ 25%]\nsklearn/feature_extraction/tests/test_image.py ....................      [ 37%]\nsklearn/feature_extraction/tests/test_text.py .......................... [ 51%]\n......................................x.........x..x..............x..... [ 92%]\n.............                                                            [100%]\n\n================== 173 passed, 4 xfailed, 6 warnings in 5.08s =================="
+    },
+    {
+        "step": 24,
+        "thought": "",
+        "action": "python -m timeit -s \"import unicodedata; s = 'abc' * 333; normalized = unicodedata.normalize('NFKD', s)\" \"''.join([c for c in normalized if not unicodedata.combining(c)])\"",
+        "observation": "OBSERVATION:\n10000 loops, best of 3: 63.5 usec per loop"
+    },
+    {
+        "step": 25,
+        "thought": "",
+        "action": "python -m timeit -s \"import unicodedata; s = 'abc' * 333; normalized = unicodedata.normalize('NFKD', s)\" \"normalized == s\"",
+        "observation": "OBSERVATION:\n10000000 loops, best of 3: 0.021 usec per loop"
+    },
+    {
+        "step": 26,
+        "thought": "",
+        "action": "python -m timeit -s \"s = 'abc' * 333\" \"try: s.encode('ascii'); pass; except UnicodeEncodeError: pass\"",
+        "observation": "OBSERVATION:\nTraceback (most recent call last):\n  File \"/opt/miniconda3/envs/testbed/lib/python3.6/runpy.py\", line 193, in _run_module_as_main\n    \"__main__\", mod_spec)\n  File \"/opt/miniconda3/envs/testbed/lib/python3.6/runpy.py\", line 85, in _run_code\n    exec(code, run_globals)\n  File \"/opt/miniconda3/envs/testbed/lib/python3.6/timeit.py\", line 362, in <module>\n    sys.exit(main())\n  File \"/opt/miniconda3/envs/testbed/lib/python3.6/timeit.py\", line 315, in main\n    t = Timer(stmt, setup, timer)\n  File \"/opt/miniconda3/envs/testbed/lib/python3.6/timeit.py\", line 123, in __init__\n    compile(stmtprefix + stmt, dummy_src_name, \"exec\")\n  File \"<timeit-src>\", line 2\n    try: s.encode('ascii'); pass; except UnicodeEncodeError: pass\n                                       ^\nSyntaxError: invalid syntax"
+    },
+    {
+        "step": 27,
+        "thought": "",
+        "action": "python -m timeit -s \"s = 'abc' * 333\" \"try:\n    s.encode('ascii')\nexcept UnicodeEncodeError:\n    pass\"",
+        "observation": "OBSERVATION:\n10000000 loops, best of 3: 0.107 usec per loop"
+    },
+    {
+        "step": 28,
+        "thought": "",
+        "action": "python -m timeit -s \"import unicodedata; s = 'abc' * 333; normalized = unicodedata.normalize('NFKD', s)\" \"any(unicodedata.combining(c) for c in normalized)\"",
+        "observation": "OBSERVATION:\n10000 loops, best of 3: 66.1 usec per loop"
+    },
+    {
+        "step": 29,
+        "thought": "",
+        "action": "python -m timeit -s \"import unicodedata; s = 'a'; normalized = unicodedata.normalize('NFKD', s)\" \"''.join([c for c in normalized if not unicodedata.combining(c)])\"",
+        "observation": "OBSERVATION:\n1000000 loops, best of 3: 0.314 usec per loop"
+    },
+    {
+        "step": 30,
+        "thought": "",
+        "action": "cat -n /testbed/sklearn/feature_extraction/text.py | sed -n '130,140p'",
+        "observation": "OBSERVATION:\n   130\t        ASCII equivalent.\n   131\t    \"\"\"\n   132\t    normalized = unicodedata.normalize('NFKD', s)\n   133\t    return ''.join([c for c in normalized if not unicodedata.combining(c)])\n   134\t\n   135\t\n   136\tdef strip_accents_ascii(s):\n   137\t    \"\"\"Transform accentuated unicode symbols into ascii or nothing\n   138\t\n   139\t    Warning: this solution is only suited for languages that have a direct\n   140\t    transliteration to ASCII symbols."
+    },
+    {
+        "step": 31,
+        "thought": "",
+        "action": "grep -r \"def strip_accents\" /testbed/sklearn/feature_extraction/text.py",
+        "observation": "OBSERVATION:\ndef strip_accents_unicode(s):\ndef strip_accents_ascii(s):"
+    },
+    {
+        "step": 32,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\nThank you for your work on this issue. Please carefully follow the steps below to help review your changes.\n\n1. If you made any changes to your code after running the reproduction script, please run the reproduction script again.\n  If the reproduction script is failing, please revisit your changes and make sure they are correct.\n  If you have already removed your reproduction script, please ignore this step.\n2. Remove your reproduction script (if you haven't done so already).\n3. If you have modified any TEST files, please revert them to the state they had before you started fixing the issue.\n  You can do this with `git checkout -- /path/to/test/file.py`. Use below <diff> to find the files you need to revert.\n4. Run the submit command again to confirm.\n\nHere is a list of all of your changes:\n\n<diff>\ndiff --git a/reproduce_issue.py b/reproduce_issue.py\nnew file mode 100644\nindex 000000000..305256611\n--- /dev/null\n+++ b/reproduce_issue.py\n@@ -0,0 +1,23 @@\n+from sklearn.feature_extraction.text import strip_accents_unicode\n+\n+# This string contains one code point, \"LATIN SMALL LETTER N WITH TILDE\"\n+s1 = chr(241)\n+\n+# This string contains two code points, \"LATIN SMALL LETTER N\" followed by \"COMBINING TILDE\"\n+s2 = chr(110) + chr(771)\n+\n+# They are visually identical, as expected\n+print(f\"s1: {s1}\") \n+print(f\"s2: {s2}\")\n+\n+# The tilde is removed from s1, as expected\n+stripped_s1 = strip_accents_unicode(s1)\n+print(f\"stripped_s1: {stripped_s1}\")\n+\n+# But strip_accents_unicode returns s2 unchanged\n+stripped_s2 = strip_accents_unicode(s2)\n+print(f\"stripped_s2: {stripped_s2}\")\n+\n+assert stripped_s1 == \"n\", f\"Expected 'n', got '{stripped_s1}'\"\n+assert stripped_s2 == \"n\", f\"Expected 'n', got '{stripped_s2}'\"\n+print(\"Reproduction successful!\")\ndiff --git a/sklearn/feature_extraction/text.py b/sklearn/feature_extraction/text.py\nindex bb5a9d646..11236d958 100644\n--- a/sklearn/feature_extraction/text.py\n+++ b/sklearn/feature_extraction/text.py\n@@ -130,10 +130,7 @@ def strip_accents_unicode(s):\n         ASCII equivalent.\n     \"\"\"\n     normalized = unicodedata.normalize('NFKD', s)\n-    if normalized == s:\n-        return s\n-    else:\n-        return ''.join([c for c in normalized if not unicodedata.combining(c)])\n+    return ''.join([c for c in normalized if not unicodedata.combining(c)])\n \n \n def strip_accents_ascii(s):\ndiff --git a/test_edge_cases.py b/test_edge_cases.py\nnew file mode 100644\nindex 000000000..3be84b26c\n--- /dev/null\n+++ b/test_edge_cases.py\n@@ -0,0 +1,15 @@\n+import unicodedata\n+from sklearn.feature_extraction.text import strip_accents_unicode\n+\n+def test(s, name):\n+    print(f\"Testing {name}: {s!r}\")\n+    normalized = unicodedata.normalize('NFKD', s)\n+    print(f\"  NFKD: {normalized!r}\")\n+    print(f\"  NFKD == s: {normalized == s}\")\n+    stripped = strip_accents_unicode(s)\n+    print(f\"  Stripped: {stripped!r}\")\n+\n+test(\"abc\", \"plain ascii\")\n+test(chr(241), \"n with tilde (NFC)\")\n+test(chr(110) + chr(771), \"n + combining tilde (NFD)\")\n+test(\"a\" + chr(771) + \"b\", \"a with tilde + b (NFD)\")\ndiff --git a/test_fix.py b/test_fix.py\nnew file mode 100644\nindex 000000000..1b6dbdecf\n--- /dev/null\n+++ b/test_fix.py\n@@ -0,0 +1,24 @@\n+import unicodedata\n+\n+def strip_accents_unicode_fixed(s):\n+    normalized = unicodedata.normalize('NFKD', s)\n+    return ''.join([c for c in normalized if not unicodedata.combining(c)])\n+\n+# This string contains one code point, \"LATIN SMALL LETTER N WITH TILDE\"\n+s1 = chr(241)\n+\n+# This string contains two code points, \"LATIN SMALL LETTER N\" followed by \"COMBINING TILDE\"\n+s2 = chr(110) + chr(771)\n+\n+print(f\"s1: {s1!r}\")\n+print(f\"s2: {s2!r}\")\n+\n+stripped_s1 = strip_accents_unicode_fixed(s1)\n+print(f\"stripped_s1: {stripped_s1!r}\")\n+\n+stripped_s2 = strip_accents_unicode_fixed(s2)\n+print(f\"stripped_s2: {stripped_s2!r}\")\n+\n+assert stripped_s1 == \"n\"\n+assert stripped_s2 == \"n\"\n+print(\"Fixed!\")\n\n</diff>"
+    },
+    {
+        "step": 33,
+        "thought": "",
+        "action": "rm /testbed/reproduce_issue.py /testbed/test_edge_cases.py /testbed/test_fix.py",
+        "observation": "Your command ran successfully and did not produce any output."
+    },
+    {
+        "step": 34,
+        "thought": "",
+        "action": "submit",
+        "observation": "OBSERVATION:\ndiff --git a/sklearn/feature_extraction/text.py b/sklearn/feature_extraction/text.py\nindex bb5a9d646..11236d958 100644\n--- a/sklearn/feature_extraction/text.py\n+++ b/sklearn/feature_extraction/text.py\n@@ -130,10 +130,7 @@ def strip_accents_unicode(s):\n         ASCII equivalent.\n     \"\"\"\n     normalized = unicodedata.normalize('NFKD', s)\n-    if normalized == s:\n-        return s\n-    else:\n-        return ''.join([c for c in normalized if not unicodedata.combining(c)])\n+    return ''.join([c for c in normalized if not unicodedata.combining(c)])\n \n \n def strip_accents_ascii(s):"
+    }
+]

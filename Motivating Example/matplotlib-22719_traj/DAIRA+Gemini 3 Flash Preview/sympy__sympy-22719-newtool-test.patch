@@ -1,0 +1,39 @@
+diff --git a/lib/matplotlib/category.py b/lib/matplotlib/category.py
+index c823b68fd9..3de6e2dea3 100644
+--- a/lib/matplotlib/category.py
++++ b/lib/matplotlib/category.py
+@@ -53,9 +53,12 @@ class StrCategoryConverter(units.ConversionInterface):
+         StrCategoryConverter._validate_unit(unit)
+         # dtype = object preserves numerical pass throughs
+         values = np.atleast_1d(np.array(value, dtype=object))
++        if values.size == 0:
++            return np.array([], dtype=float)
+         # pass through sequence of non binary numbers
+         with _api.suppress_matplotlib_deprecation_warning():
+             is_numlike = all(units.ConversionInterface.is_numlike(v)
++                             and v is not None
+                              and not isinstance(v, (str, bytes))
+                              for v in values)
+         if is_numlike:
+@@ -66,7 +69,11 @@ class StrCategoryConverter(units.ConversionInterface):
+             return np.asarray(values, dtype=float)
+         # force an update so it also does type checking
+         unit.update(values)
+-        return np.vectorize(unit._mapping.__getitem__, otypes=[float])(values)
++        def convert_value(val):
++            if val is None:
++                return np.nan
++            return unit._mapping[val]
++        return np.vectorize(convert_value, otypes=[float])(values)
+ 
+     @staticmethod
+     def axisinfo(unit, axis):
+@@ -224,6 +231,8 @@ class UnitData:
+         convertible = True
+         for val in OrderedDict.fromkeys(data):
+             # OrderedDict just iterates over unique values in data.
++            if val is None:
++                continue
+             _api.check_isinstance((str, bytes), value=val)
+             if convertible:
+                 # this will only be called so long as convertible is True.
