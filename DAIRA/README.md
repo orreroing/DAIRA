@@ -81,7 +81,6 @@ sweagent run-batch \
 
 Language-specific validation configs are available at:
 
-- `config/DAIRA_PYTHON.yaml`
 - `config/DAIRA_C_CPP.yaml`
 - `config/DAIRA_JAVA.yaml`
 - `config/DAIRA_RUBY.yaml`
