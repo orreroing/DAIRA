@@ -48,7 +48,7 @@ Docker images and the runtime environment are prepared:
 
 ```bash
 sweagent run \
-  --config config/default_dyana_example4.yaml \
+  --config config/daira_default.yaml \
   --agent.model.name deepseek-v4-flash \
   --agent.model.api_base https://api.deepseek.com \
   --env.repo.github_url https://github.com/SWE-agent/test-repo \
@@ -60,7 +60,7 @@ model with `instant_empty_submit`:
 
 ```bash
 sweagent run \
-  --config config/default_dyana_example4.yaml \
+  --config config/daira_default.yaml \
   --agent.model.name instant_empty_submit \
   --env.repo.github_url https://github.com/SWE-agent/test-repo \
   --problem_statement.path examples/test_repo_issue.md
@@ -70,7 +70,7 @@ Run a small SWE-bench batch:
 
 ```bash
 sweagent run-batch \
-  --config config/default_dyana_example4.yaml \
+  --config config/daira_default.yaml \
   --agent.model.name deepseek-v4-flash \
   --agent.model.api_base https://api.deepseek.com \
   --instances.type swe_bench \

@@ -1,4 +1,4 @@
-* Default DAIRA run config: `default_dyana_example4.yaml`
+* Default DAIRA run config: `daira_default.yaml`
 * Language-specific validation configs: `context_retrieval*.yaml`
 * Multilingual SWE-bench subsets for validation: `multilingual_subsets/` and `multilingual_subsets_all/`
 * Upstream-compatible configs are retained when they are needed by the DAIRA runtime.
