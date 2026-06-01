@@ -10,6 +10,7 @@ The directory structure is organized to align strictly with the Research Questio
 
 ```text
 DAIRA/
+├── DAIRA/                       # 🧩 Released source code and core configs
 ├── Motivating Example/          # 🔎 Case Studies with Gemini 3 Flash Preview ("Perspective Glasses" in action) 
 │   ├── sympy_17630_traj/        # Full execution trajectory for SymPy-17630
 │   └── matplotlib-22719_traj/   # Full execution trajectory for Matplotlib-22719
@@ -30,6 +31,7 @@ DAIRA/
     * These examples illustrate how DAIRA successfully resolves complex defects (e.g., polymorphic control flows, implicit type degradation) where baselines failed due to a lack of intermediate execution state observation.
 
 ### 2. Core Components
+* **`DAIRA/`**: Released implementation of the DAIRA agent. It contains the SWE-agent-based runtime, dynamic analysis tool bundles, trace summarization logic, default configuration (`config/DAIRA_DEFAULT.yaml`), and language-specific validation configs for C/C++, Java, and Ruby. See **`DAIRA/README.md`** for installation and usage.
 * **`prompt/`**: Contains the **System Prompts** and **Analyse Prompts** designed to guide the agent in utilizing dynamic analysis tools and receiving structured analysis report.
 * **`swebench result/`**: The raw evaluation logs (JSON format) generated from running DAIRA and baseline methods on the **SWE-bench Verified** dataset. Includes results for:
     * `DAIRA` (Ours)
@@ -56,4 +58,4 @@ This section corresponds to the quantitative evaluation of the framework:
         * SWE-agent(baseline)
 
 ### 4. 📢 Code Availability
-The full source code of the DAIRA framework will be released publicly upon the formal publication of the paper.
+The released source code is available under **`DAIRA/`**. The implementation includes the DAIRA runtime, dynamic analysis tools, core configuration files, and a reproducible test-repo example. Please refer to **`DAIRA/README.md`** for setup and running instructions.
