@@ -158,17 +158,17 @@ Run each language subset with its matching dynamic-analysis config:
 ```bash
 sweagent run-batch --num_workers=1 \
   --instances.type file --instances.path config/multilingual_subsets_all/swebench_multilingual_ruby_44.yaml \
-  --config config/context_retrieval_ruby.yaml \
+  --config config/DAIRA_RUBY.yaml \
   --agent.model.name deepseek/deepseek-chat
 
 sweagent run-batch --num_workers=1 \
   --instances.type file --instances.path config/multilingual_subsets_all/swebench_multilingual_c_cpp_42.yaml \
-  --config config/context_retrieval_c.yaml \
+  --config config/DAIRA_C_CPP.yaml \
   --agent.model.name deepseek/deepseek-chat
 
 sweagent run-batch --num_workers=1 \
   --instances.type file --instances.path config/multilingual_subsets_all/swebench_multilingual_java_43.yaml \
-  --config config/context_retrieval_java.yaml \
+  --config config/DAIRA_JAVA.yaml \
   --agent.model.name deepseek/deepseek-chat
 ```
 

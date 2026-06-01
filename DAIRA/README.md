@@ -48,7 +48,7 @@ Docker images and the runtime environment are prepared:
 
 ```bash
 sweagent run \
-  --config config/daira_default.yaml \
+  --config config/DAIRA_DEFAULT.yaml \
   --agent.model.name deepseek-v4-flash \
   --agent.model.api_base https://api.deepseek.com \
   --env.repo.github_url https://github.com/SWE-agent/test-repo \
@@ -60,7 +60,7 @@ model with `instant_empty_submit`:
 
 ```bash
 sweagent run \
-  --config config/daira_default.yaml \
+  --config config/DAIRA_DEFAULT.yaml \
   --agent.model.name instant_empty_submit \
   --env.repo.github_url https://github.com/SWE-agent/test-repo \
   --problem_statement.path examples/test_repo_issue.md
@@ -70,7 +70,7 @@ Run a small SWE-bench batch:
 
 ```bash
 sweagent run-batch \
-  --config config/daira_default.yaml \
+  --config config/DAIRA_DEFAULT.yaml \
   --agent.model.name deepseek-v4-flash \
   --agent.model.api_base https://api.deepseek.com \
   --instances.type swe_bench \
@@ -81,11 +81,10 @@ sweagent run-batch \
 
 Language-specific validation configs are available at:
 
-- `config/context_retrieval.yaml`
-- `config/context_retrieval_c.yaml`
-- `config/context_retrieval_java.yaml`
-- `config/context_retrieval_javascript.yaml`
-- `config/context_retrieval_ruby.yaml`
+- `config/DAIRA_PYTHON.yaml`
+- `config/DAIRA_C_CPP.yaml`
+- `config/DAIRA_JAVA.yaml`
+- `config/DAIRA_RUBY.yaml`
 
 Small multilingual SWE-bench subsets are under `config/multilingual_subsets/`; larger bookkeeping subsets are under `config/multilingual_subsets_all/`.
 
