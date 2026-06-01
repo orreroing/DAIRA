@@ -1,0 +1,27 @@
+main() {
+    cd $ROOT
+
+    # Check if the patch file exists and is non-empty
+    if [ -s "/root/test.patch" ]; then
+        # Apply the patch in reverse
+        git apply -R < "/root/test.patch"
+    fi
+
+    # Reproduction files are scratch artifacts for dynamic analysis. They should
+    # never be submitted as the model patch.
+    git ls-files --others --exclude-standard | while IFS= read -r path; do
+        case "$(basename "$path")" in
+            reproduce_issue.*|edge_case*|trace_reproduce.*|trace_edge_case.*)
+                rm -f -- "$path"
+                ;;
+        esac
+    done
+
+    git add -A
+    git diff --cached > /root/model.patch
+    echo "<<SWE_AGENT_SUBMISSION>>"
+    cat /root/model.patch
+    echo "<<SWE_AGENT_SUBMISSION>>"
+}
+
+main "$@"

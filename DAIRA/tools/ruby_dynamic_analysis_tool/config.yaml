@@ -1,0 +1,43 @@
+tools:
+  run_ruby_trace:
+    signature: |
+      run_ruby_trace <script_path> <file_filter> <method_to_trace> <trace_depth>
+    docstring: >
+      **Description:**
+      Executes a Ruby script under Ruby TracePoint and emits an LLM-friendly dynamic execution report.
+      Use this for Ruby repositories when static reading is not enough to understand the runtime path.
+      **Capabilities:**
+      1.  Starts tracing when `method_to_trace` is called.
+      2.  Records Ruby `call`, `return`, and `raise` events.
+      3.  Filters events by file path substring to keep traces focused.
+      4.  Includes return values and exception messages when Ruby exposes them.
+      **Parameter Configuration:**
+      1.  **`script_path`** (str): Absolute path to a minimal Ruby reproduction script.
+          * *Example:* `/testbed/reproduce_issue.rb`
+      2.  **`file_filter`** (str): A specific path substring used to keep only relevant frames.
+          * *Example:* `lib/my_gem` or `app/models/user.rb`
+      3.  **`method_to_trace`** (str): The Ruby method name where tracing should start.
+          * Use only the method name, for example `normalize`, not `Parser#normalize`.
+      4.  **`trace_depth`** (int): Maximum nested Ruby call depth to record after tracing starts.
+          * Start around **10** and reduce it if output becomes too large.
+      **Strict Usage Rules:**
+      * Create a small reproduction script first; tracing test suites or app boot paths can produce excessive output.
+      * Keep `file_filter` narrow. Prefer a specific library folder or file over the repository root.
+      * If the result says no events were captured, choose the top-level Ruby method directly called by the reproduction script.
+    arguments:
+      - name: script_path
+        type: string
+        description: "Absolute path to the target Ruby script to execute and trace."
+        required: true
+      - name: file_filter
+        type: string
+        description: "Path substring for filtering TracePoint events, such as `lib/my_gem` or `app/services`."
+        required: true
+      - name: method_to_trace
+        type: string
+        description: "Ruby method name that starts tracing. Use the method name only, without class/module prefixes."
+        required: true
+      - name: trace_depth
+        type: integer
+        description: "Maximum nested Ruby call depth to record after tracing starts."
+        required: true

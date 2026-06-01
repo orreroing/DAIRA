@@ -1,0 +1,169 @@
+#!/usr/bin/env node
+// Trace a Node.js script with the built-in inspector CPU profiler.
+
+const fs = require("fs");
+const path = require("path");
+const inspector = require("inspector");
+
+function usage() {
+  console.error("Usage: run_node_trace <script_path> <file_filter> <function_to_trace> <trace_depth>");
+  console.error("Example: run_node_trace /testbed/reproduce_issue.js lib/parser parse 12");
+}
+
+function post(session, method, params = {}) {
+  return new Promise((resolve, reject) => {
+    session.post(method, params, (error, result) => {
+      if (error) reject(error);
+      else resolve(result);
+    });
+  });
+}
+
+function locationFor(node) {
+  const frame = node.callFrame || {};
+  const url = frame.url || "<anonymous>";
+  const line = typeof frame.lineNumber === "number" ? frame.lineNumber + 1 : "?";
+  const col = typeof frame.columnNumber === "number" ? frame.columnNumber + 1 : "?";
+  return `${url}:${line}:${col}`;
+}
+
+function functionName(node) {
+  const frame = node.callFrame || {};
+  return frame.functionName || "(anonymous)";
+}
+
+function buildChildren(profile) {
+  const byId = new Map();
+  for (const node of profile.nodes || []) {
+    byId.set(node.id, { node, children: [] });
+  }
+  for (const wrapped of byId.values()) {
+    for (const childId of wrapped.node.children || []) {
+      const child = byId.get(childId);
+      if (child) wrapped.children.push(child);
+    }
+  }
+  return byId;
+}
+
+function matchesFile(node, fileFilter) {
+  if (!fileFilter) return true;
+  const url = (node.callFrame && node.callFrame.url) || "";
+  return url.includes(fileFilter);
+}
+
+function subtreeHasTarget(wrapped, targetName) {
+  if (!targetName) return true;
+  if (functionName(wrapped.node).includes(targetName)) return true;
+  return wrapped.children.some((child) => subtreeHasTarget(child, targetName));
+}
+
+function collectTrace(wrapped, fileFilter, targetName, maxDepth, lines, state, depth = 0) {
+  const name = functionName(wrapped.node);
+  const isTarget = !targetName || name.includes(targetName);
+  const inScope = matchesFile(wrapped.node, fileFilter);
+
+  if (!state.active) {
+    if (!isTarget && !subtreeHasTarget(wrapped, targetName)) return;
+    if (isTarget) state.active = true;
+  }
+
+  const shouldPrint = state.active && inScope && depth <= maxDepth;
+  if (shouldPrint) {
+    const indent = "  ".repeat(depth);
+    const hitCount = wrapped.node.hitCount || 0;
+    lines.push(
+      `${String(++state.seq).padStart(4, "0")} ${indent}SAMPLE ${name} hits=${hitCount} (${locationFor(wrapped.node)})`,
+    );
+  }
+
+  for (const child of wrapped.children) {
+    collectTrace(child, fileFilter, targetName, maxDepth, lines, state, shouldPrint ? depth + 1 : depth);
+  }
+}
+
+async function main(argv) {
+  if (argv.length !== 6) {
+    usage();
+    return 2;
+  }
+
+  const scriptPath = path.resolve(argv[2]);
+  const fileFilter = argv[3];
+  const functionToTrace = argv[4];
+  const traceDepth = Math.max(Number.parseInt(argv[5], 10) || 10, 1);
+
+  if (!fs.existsSync(scriptPath) || !fs.statSync(scriptPath).isFile()) {
+    console.error(`Error: target script not found: ${scriptPath}`);
+    return 1;
+  }
+
+  const source = fs.readFileSync(scriptPath, "utf8");
+  const session = new inspector.Session();
+  session.connect();
+
+  console.log("--- Starting Node.js inspector CPU profile trace ---");
+  console.log(`Target file: ${scriptPath}`);
+  console.log(`Tracking file filter: ${fileFilter}`);
+  console.log(`Local tracking function: ${functionToTrace}`);
+  console.log("");
+  console.log("--- Target script console output ---");
+
+  let scriptError = null;
+  let profile;
+  try {
+    await post(session, "Profiler.enable");
+    await post(session, "Profiler.start");
+    process.argv = [process.argv[0], scriptPath];
+    try {
+      require(scriptPath);
+    } catch (error) {
+      scriptError = error;
+    }
+    profile = (await post(session, "Profiler.stop")).profile;
+  } finally {
+    session.disconnect();
+  }
+
+  console.log(`--- Target script console output ended${scriptError ? " (with error)" : ""} ---`);
+  if (scriptError) {
+    console.error(`Target script raised ${scriptError.name}: ${scriptError.message}`);
+  }
+  console.log("");
+
+  const byId = buildChildren(profile);
+  const root = byId.get(profile.nodes[0].id);
+  const lines = [];
+  if (root) {
+    collectTrace(root, fileFilter, functionToTrace, traceDepth, lines, { active: false, seq: 0 });
+  }
+
+  console.log("<target_file>");
+  process.stdout.write(source.endsWith("\n") ? source : `${source}\n`);
+  console.log("</target_file>");
+  console.log(`* **target_file:** \`${scriptPath}\``);
+  console.log("* **target_language:** `javascript/typescript`");
+  console.log(`* **file_filter:** \`${fileFilter}\``);
+  console.log(`* **function_to_trace:** \`${functionToTrace}\``);
+  console.log(`* **trace_depth:** \`${traceDepth}\``);
+  console.log("* **Filter Level:** CPU-profiled JavaScript functions after the target function appears in the sampled call tree.");
+  console.log("");
+  console.log("<trace_log>");
+  console.log("```text");
+  if (lines.length === 0) {
+    console.log("# No matching Node.js inspector profile samples were captured.");
+  } else {
+    console.log(lines.join("\n"));
+  }
+  console.log("```");
+  console.log("</trace_log>");
+
+  return 0;
+}
+
+main(process.argv)
+  .then((code) => process.exit(code))
+  .catch((error) => {
+    console.error(`Fatal tracer error: ${error.stack || error.message}`);
+    process.exit(1);
+  });

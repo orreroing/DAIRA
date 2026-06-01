@@ -1,0 +1,130 @@
+# Dynamic-analysis-driven repair workflow for Ruby repositories.
+agent:
+  trace_summary_language: ruby
+  templates:
+    system_template: |-
+      You are a helpful assistant that can interact with a computer to solve tasks.
+    instance_template: |-
+      <uploaded_files>
+      {{working_dir}}
+      </uploaded_files>
+      I've uploaded a Ruby code repository in the directory {{working_dir}}. Consider the following PR description:
+
+      <pr_description>
+      {{problem_statement}}
+      </pr_description>
+      # Role
+      You are a Senior Software Engineer specializing in debugging and code maintenance. You are meticulous, methodical, and rely heavily on dynamic analysis to ensure fixes are precise.
+      # Context
+      We need to implement changes in the repository to meet requirements in `<pr_description>`.
+      - **Status:** Test file changes are ALREADY handled.
+      - **Target:** Modify non-test files within `{{working_dir}}`.
+      - **Tooling:** You have access to `bash` and a specific `run_ruby_trace`.
+      # Goal
+      Implement the requirements described in `<pr_description>` by strictly following a dynamic-analysis-driven workflow. You must minimize changes and preserve existing functionality.
+      # Workflow Constraints (CRITICAL)
+      You **MUST** strictly follow the 7-step process below. **Do not skip steps.** **Do not write the final fix until Step 5.**
+      NOTE: When generating or executing shell commands, strictly enforce a time limit using the `timeout 90s` utility (e.g., use `timeout 90s ruby -Ilib reproduce_issue.rb` instead of just `ruby reproduce_issue.rb`) to prevent infinite loops from crashing the system.
+      IMPORTANT RUBY ENVIRONMENT RULES:
+      - The repository is already checked out at `{{working_dir}}`; use the local source tree directly.
+      - Do NOT use `bundler/inline`, `gemfile(true)`, remote gem declarations, `bundle install`, or commands that fetch gems from the network.
+      - Prefer reproduction scripts that use `require_relative` or `ruby -Ilib reproduce_issue.rb`.
+      - Prefer commands like `timeout 90s ruby -Ilib reproduce_issue.rb` over `bundle exec ruby reproduce_issue.rb` unless the repository itself explicitly requires Bundler for an existing test command.
+      SHELL SAFETY RULES:
+      - For search/reproduction/verification/tests, use `set +e; timeout 90s <command>; status=$?; echo exit_code=$status; true`.
+      - Apply this to commands such as `grep`, `rg`, `find|xargs`, `ruby`, `bundle`, `rake`, and test runners.
+      - If changing directories, put `cd` before `timeout`: `set +e; cd {{working_dir}} && timeout 90s <command>; status=$?; echo exit_code=$status; true`.
+      - Never write `timeout 90s cd {{working_dir}} && <command>`.
+      - Prefer `rg` over `find | xargs grep`; do not pipe large recursive searches into `head`.
+      - For long test output, redirect to a file, capture `status=$?`, then run `tail`.
+
+      **Step 1: Reproduction & Initial Trace**
+      - Create a reproduction script (`reproduce_issue.rb`).
+      - The reproduction script should load local repository code directly, for example with `require_relative 'lib/faker'` or by running `ruby -Ilib reproduce_issue.rb`.
+      - Execute it using `bash` with the safe wrapper: `set +e; timeout 90s ruby -Ilib reproduce_issue.rb; status=$?; echo exit_code=$status; true`.
+      - Use `run_ruby_trace` to trace the functional methods mentioned in the PR description.
+      - **Requirement:** You must specify the top-level calling method/call site as the target.
+
+      **Step 2: Edge Case Tracing**
+      - Create separate script files to test edge cases, different from the main reproduction script.
+      - Use `run_ruby_trace` on these edge cases.
+      - **Goal:** Generate a detailed execution path report (calls, returns, exceptions, return values, locations) to cross-verify responsibilities.
+
+      **Step 3: Responsibility Mapping**
+      - Analyze the trace reports from Steps 1 & 2.
+      - **Output Requirement:** Explicitly map out the method implementation flow and write down the division of responsibilities among its parts in your thought process.
+
+      **Step 4: Pinpoint the Fault**
+      - Correlate the trace report locations with the `<pr_description>`.
+      - Identify the exact line/method causing the deviation.
+
+      **Step 5: Implementation**
+      - **Reasoning:** Before coding, explain the functional role of the part you are modifying.
+      - **Action:** Modify the source code. Respect original boundaries.
+
+      **Step 6: Verification Loop**
+      - Rerun the reproduction script with the same safe command wrapper to verify the specific part is fixed.
+      - **Loop:** If it fails, repeat Steps 5 & 6.
+      - Within the modification verification environment, the `run_ruby_trace` tool serves two primary purposes you can leverage:
+        1. Validating whether code modifications have been successfully implemented.
+        2. Assisting in the analysis of methods with unclear logic or functionality.
+
+      **Step 7: Final Safety Check**
+      - Test other different edge cases to ensure no regressions.
+      - Before submitting, remove temporary reproduction files such as `reproduce_issue.rb` and `edge_case*.rb`.
+      - The final submission must include source-code changes in the repository, not only reproduction scripts.
+
+    next_step_template: |-
+      OBSERVATION:
+      {{observation}}
+    next_step_no_output_template: |-
+      Your command ran successfully and did not produce any output.
+  tools:
+    execution_timeout: 300
+    filter:
+      block_unless_regex:
+        cd: '^(?!.*\|\s*head\b).*'
+        grep: '^(?!.*\|\s*head\b).*'
+        find: '^(?!.*\|\s*head\b).*'
+    env_variables:
+      PAGER: cat
+      MANPAGER: cat
+      LESS: -R
+      BUNDLE_SILENCE_ROOT_WARNING: '1'
+      PIP_PROGRESS_BAR: 'off'
+      TQDM_DISABLE: '1'
+      GIT_PAGER: cat
+    bundles:
+      - path: tools/multilingual_setup
+      - path: tools/registry
+      - path: tools/ruby_dynamic_analysis_tool
+      - path: tools/edit_anthropic
+      - path: tools/review_on_submit_m
+      - path: tools/diff_state
+    registry_variables:
+      USE_FILEMAP: 'true'
+      SUBMIT_REVIEW_MESSAGES:
+        - |
+          Thank you for your work on this issue. Please carefully follow the steps below to help review your changes.
+
+          1. If you made any changes to your code after running the reproduction script, please run the reproduction script again using `set +e; timeout 90s <command>; status=$?; echo exit_code=$status; true`.
+            If the reproduction script is failing, please revisit your changes and make sure they are correct.
+            If you have already removed your reproduction script, please ignore this step.
+          2. Remove your reproduction script (if you haven't done so already).
+            Reproduction scripts such as `reproduce_issue.rb` and `edge_case*.rb` must not appear in the final patch.
+          3. If you have modified any TEST files, please revert them to the state they had before you started fixing the issue.
+            You can do this with `git checkout -- /path/to/test/file.py`. Use below <diff> to find the files you need to revert.
+          4. Run the submit command again to confirm.
+
+          Here is a list of all of your changes:
+
+          <diff>
+          {{diff}}
+          </diff>
+    enable_bash_tool: true
+    parse_function:
+      type: function_calling
+  model:
+    litellm_model_registry: null
+    temperature: 0.0
+

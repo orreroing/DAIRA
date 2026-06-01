@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import io
+import os
+import runpy
+import sys
+from pathlib import Path
+
+import hunter
+from hunter import And, Not, Or, Q, When, actions
+
+
+def read_text_file(path: str) -> str | None:
+    target = Path(path)
+    if not target.exists():
+        print(f"Error: file not found: {target}", file=sys.stderr)
+        return None
+    if not target.is_file():
+        print(f"Error: path is not a file: {target}", file=sys.stderr)
+        return None
+    try:
+        return target.read_text(encoding="utf-8")
+    except Exception as exc:
+        print(f"Error: could not read {target}: {exc}", file=sys.stderr)
+        return None
+
+
+def run_hunter_trace(target_script_path: str, target_module_prefix: str, function_to_trace: str, trace_depth: int) -> None:
+    """Run a Python script under Hunter and emit a DAIRA-readable trace report."""
+    print("--- Starting DAIRA Python dynamic trace ---")
+    print(f"Target file: {target_script_path}")
+    print(f"Module/file filter: {target_module_prefix}")
+    print(f"Local tracking function: {function_to_trace}")
+
+    file_content = read_text_file(target_script_path)
+    if file_content is None:
+        return
+
+    log_buffer = io.StringIO()
+    try:
+        log_buffer.write("<target_file>\n")
+        log_buffer.write(file_content)
+        log_buffer.write("\n</target_file>\n")
+        log_buffer.write(f"* **target_file:** `{target_script_path}`\n")
+        log_buffer.write("* **target_language:** `python`\n")
+        log_buffer.write(f"* **module_filter:** `{target_module_prefix}`\n")
+        log_buffer.write(f"* **function_to_trace:** `{function_to_trace}`\n")
+        log_buffer.write(f"* **trace_depth:** `{trace_depth}`\n")
+        log_buffer.write(
+            "* **Filter Level:** Start at the requested function, then trace call, return, and exception events "
+            "inside matching non-stdlib files.\n\n"
+        )
+        log_buffer.write("<trace_log>\n```text\n")
+
+        start_condition = Q(kind="call", function=function_to_trace)
+        stop_condition = Q(depth=0, kind="return")
+        log_condition = And(
+            Q(filename_contains=target_module_prefix),
+            Q(stdlib=False),
+            Q(depth_lte=trace_depth),
+            Or(Q(kind="call"), Q(kind="return"), Q(kind="exception")),
+        )
+        log_action = actions.CallPrinter(stream=log_buffer, force_colors=False)
+        combined_predicate = Or(
+            When(stop_condition, log_action, lambda event: hunter.stop()),
+            When(And(log_condition, Not(stop_condition)), log_action),
+        )
+
+        old_sys_argv = sys.argv
+        sys.argv = [target_script_path]
+        try:
+            with hunter.trace(hunter.From(start_condition, combined_predicate), actions=[]):
+                print("\n--- Target script console output ---")
+                try:
+                    runpy.run_path(target_script_path, run_name="__main__")
+                    print("--- Target script console output ended ---\n")
+                except Exception as script_error:
+                    print("--- Target script console output ended (with error) ---")
+                    print(f"Target script failed: {script_error}", file=sys.stderr)
+        finally:
+            sys.argv = old_sys_argv
+
+        log_buffer.write("```\n</trace_log>\n")
+        print(log_buffer.getvalue())
+    except SystemExit:
+        pass
+    except Exception as exc:
+        print(f"Fatal tracing error: {exc}", file=sys.stderr)
+    finally:
+        log_buffer.close()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Run a Python script under Hunter and print a DAIRA dynamic trace report.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "script_path",
+        type=str,
+        help="Absolute path to the Python reproduction script, for example '/path/to/repo/reproduce_issue.py'.",
+    )
+    parser.add_argument(
+        "module_prefix",
+        type=str,
+        help="Module or filename filter passed to Hunter, for example 'sympy/printing' or 'argparse_demo.py'.",
+    )
+    parser.add_argument("function_to_trace", type=str, help="Function where tracing should begin.")
+    parser.add_argument("trace_depth", type=int, help="Maximum call depth to trace.")
+
+    args = parser.parse_args()
+    run_hunter_trace(args.script_path, args.module_prefix, args.function_to_trace, args.trace_depth)
+
+
+if __name__ == "__main__":
+    main()

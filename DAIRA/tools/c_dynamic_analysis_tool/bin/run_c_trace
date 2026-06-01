@@ -1,0 +1,499 @@
+#!/usr/bin/env python3
+"""Compile a C/C++ reproduction file with function instrumentation and trace calls."""
+
+from __future__ import annotations
+
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+TRACER_CPP = r'''
+#define _GNU_SOURCE
+#include <cxxabi.h>
+#include <dlfcn.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static int trace_active = 0;
+static int trace_depth = 0;
+static int trace_seq = 0;
+static int trace_max_depth = 10;
+static char trace_target[256] = {0};
+static char trace_symbol_filter[256] = {0};
+
+static void init_trace_config(void) __attribute__((no_instrument_function));
+static const char *symbol_name(void *fn) __attribute__((no_instrument_function));
+static int contains_filter_token(const char *name, const char *filter) __attribute__((no_instrument_function));
+static int should_show(const char *name) __attribute__((no_instrument_function));
+static void print_indent(int depth) __attribute__((no_instrument_function));
+
+static void init_trace_config(void) {
+    const char *target = getenv("C_TRACE_TARGET");
+    const char *depth = getenv("C_TRACE_DEPTH");
+    const char *filter = getenv("C_TRACE_SYMBOL_FILTER");
+    if (target) {
+        snprintf(trace_target, sizeof(trace_target), "%s", target);
+    }
+    if (filter) {
+        snprintf(trace_symbol_filter, sizeof(trace_symbol_filter), "%s", filter);
+    }
+    if (depth) {
+        int parsed = atoi(depth);
+        if (parsed > 0) {
+            trace_max_depth = parsed;
+        }
+    }
+}
+
+static const char *symbol_name(void *fn) {
+    static char buffer[1024];
+    Dl_info info;
+    if (dladdr(fn, &info) == 0 || info.dli_sname == NULL) {
+        snprintf(buffer, sizeof(buffer), "%p", fn);
+        return buffer;
+    }
+
+    int status = 0;
+    char *demangled = abi::__cxa_demangle(info.dli_sname, NULL, NULL, &status);
+    if (status == 0 && demangled != NULL) {
+        snprintf(buffer, sizeof(buffer), "%s", demangled);
+        free(demangled);
+    } else {
+        snprintf(buffer, sizeof(buffer), "%s", info.dli_sname);
+    }
+    return buffer;
+}
+
+static int contains_filter_token(const char *name, const char *filter) {
+    char token[256];
+    int pos = 0;
+    for (int i = 0;; i++) {
+        char ch = filter[i];
+        if (ch == '|' || ch == '\0') {
+            token[pos] = '\0';
+            if (pos > 0 && strstr(name, token) != NULL) {
+                return 1;
+            }
+            pos = 0;
+            if (ch == '\0') {
+                return 0;
+            }
+            continue;
+        }
+        if (pos < (int)sizeof(token) - 1) {
+            token[pos++] = ch;
+        }
+    }
+}
+
+static int should_show(const char *name) {
+    return trace_symbol_filter[0] == '\0' || contains_filter_token(name, trace_symbol_filter);
+}
+
+static void print_indent(int depth) {
+    for (int i = 0; i < depth; i++) {
+        fputs("  ", stderr);
+    }
+}
+
+extern "C" void __cyg_profile_func_enter(void *this_fn, void *call_site)
+    __attribute__((no_instrument_function));
+extern "C" void __cyg_profile_func_exit(void *this_fn, void *call_site)
+    __attribute__((no_instrument_function));
+
+extern "C" void __cyg_profile_func_enter(void *this_fn, void *call_site) {
+    (void)call_site;
+    if (trace_target[0] == '\0') {
+        init_trace_config();
+    }
+
+    const char *name = symbol_name(this_fn);
+    if (!trace_active) {
+        if (trace_target[0] == '\0' || strstr(name, trace_target) != NULL) {
+            trace_active = 1;
+            trace_depth = 0;
+        } else {
+            return;
+        }
+    }
+
+    if (trace_depth < trace_max_depth && should_show(name)) {
+        fprintf(stderr, "%04d ", ++trace_seq);
+        print_indent(trace_depth);
+        fprintf(stderr, "CALL   %s\n", name);
+    }
+    trace_depth++;
+}
+
+extern "C" void __cyg_profile_func_exit(void *this_fn, void *call_site) {
+    (void)call_site;
+    if (!trace_active) {
+        return;
+    }
+
+    const char *name = symbol_name(this_fn);
+    if (trace_depth > 0) {
+        trace_depth--;
+    }
+    if (trace_depth < trace_max_depth && should_show(name)) {
+        fprintf(stderr, "%04d ", ++trace_seq);
+        print_indent(trace_depth);
+        fprintf(stderr, "RETURN %s\n", name);
+    }
+
+    if (trace_depth == 0 && (trace_target[0] == '\0' || strstr(name, trace_target) != NULL)) {
+        trace_active = 0;
+    }
+}
+'''
+
+
+def usage() -> None:
+    print(
+        "Usage: run_c_trace <source_path> <symbol_filter> <function_to_trace> <trace_depth> [compile_flags] [link_flags]",
+        file=sys.stderr,
+    )
+    print(
+        "Example: run_c_trace /testbed/reproduce_issue.c my_module solve 12",
+        file=sys.stderr,
+    )
+    print(
+        "Example: run_c_trace /tmp/repro.cpp 'write|format' main 20 '-std=c++20 -I include' '-lm'",
+        file=sys.stderr,
+    )
+    print(
+        "Advanced: use -- <compile_flags> --link <link_flags>, or environment C_TRACE_COMPILE_FLAGS/C_TRACE_LINK_FLAGS.",
+        file=sys.stderr,
+    )
+
+
+def compiler_for(path: Path) -> str:
+    if path.suffix.lower() in {".cc", ".cpp", ".cxx", ".hpp"}:
+        return "g++"
+    return "gcc"
+
+
+def run_cmd(cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, cwd=cwd, env=env, text=True, capture_output=True, check=False)
+
+
+def shell_flags(env_name: str) -> list[str]:
+    value = os.environ.get(env_name, "")
+    if not value:
+        return []
+    try:
+        return shlex.split(value)
+    except ValueError as exc:
+        print(f"Warning: ignoring invalid {env_name}: {exc}", file=sys.stderr)
+        return []
+
+
+def split_optional_flags(args: list[str]) -> tuple[list[str], list[str]]:
+    compile_flags: list[str] = []
+    link_flags: list[str] = []
+    current = compile_flags
+
+    def add_flags(target: list[str], value: str) -> None:
+        if not value:
+            return
+        try:
+            target.extend(shlex.split(value))
+        except ValueError:
+            target.append(value)
+
+    if args and not any(
+        arg in {"--", "--link"} or arg.startswith("--compile-flags=") or arg.startswith("--link-flags=")
+        for arg in args
+    ):
+        add_flags(compile_flags, args[0])
+        if len(args) > 1:
+            add_flags(link_flags, " ".join(args[1:]))
+        return compile_flags, link_flags
+
+    for arg in args:
+        if arg == "--":
+            current = compile_flags
+            continue
+        if arg == "--link":
+            current = link_flags
+            continue
+        if arg.startswith("--compile-flags="):
+            add_flags(compile_flags, arg.split("=", 1)[1])
+            continue
+        if arg.startswith("--link-flags="):
+            add_flags(link_flags, arg.split("=", 1)[1])
+            continue
+        add_flags(current, arg)
+    return compile_flags, link_flags
+
+
+def is_cpp(path: Path) -> bool:
+    return path.suffix.lower() in {".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx"}
+
+
+def auto_include_flags(source_path: Path) -> list[str]:
+    candidates = [
+        source_path.parent,
+        Path.cwd(),
+        Path.cwd() / "include",
+        Path.cwd() / "src",
+        Path("/testbed"),
+        Path("/testbed/include"),
+        Path("/testbed/src"),
+    ]
+    flags: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate.exists() or not candidate.is_dir():
+            continue
+        resolved = str(candidate.resolve())
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        flags.extend(["-I", resolved])
+    return flags
+
+
+def has_flag(flags: list[str], prefix: str) -> bool:
+    return any(flag == prefix or flag.startswith(prefix) for flag in flags)
+
+
+def default_compile_variants(source_path: Path, user_flags: list[str]) -> list[list[str]]:
+    base = auto_include_flags(source_path) + user_flags
+    fmt_header_only = []
+    if not has_flag(base, "-DFMT_HEADER_ONLY") and (
+        (Path.cwd() / "include" / "fmt").exists() or (Path("/testbed/include/fmt")).exists()
+    ):
+        fmt_header_only = ["-DFMT_HEADER_ONLY"]
+
+    if not is_cpp(source_path) or has_flag(base, "-std="):
+        return [fmt_header_only + base, base] if fmt_header_only else [base]
+
+    variants = [fmt_header_only + base, base] if fmt_header_only else [base]
+    for standard in ["-std=c++20", "-std=c++2a", "-std=c++23", "-std=c++2b", "-std=c++17", "-std=c++14"]:
+        variants.append([standard] + base)
+        if fmt_header_only:
+            variants.append([standard] + fmt_header_only + base)
+    return variants
+
+
+def default_link_variants(source_path: Path, user_flags: list[str], compile_flags: list[str]) -> list[list[str]]:
+    variants = [user_flags]
+    if not is_cpp(source_path):
+        return variants
+
+    compile_like_flags: list[str] = []
+    next_is_include = False
+    for flag in compile_flags:
+        if next_is_include:
+            compile_like_flags.append(flag)
+            next_is_include = False
+            continue
+        if flag == "-I":
+            compile_like_flags.append(flag)
+            next_is_include = True
+            continue
+        if flag.startswith("-I") or flag.startswith("-D") or flag.startswith("-std="):
+            compile_like_flags.append(flag)
+
+    cwd = Path.cwd()
+    fmt_sources = [cwd / "src" / "format.cc", cwd / "src" / "os.cc"]
+    existing_fmt_sources = [str(path.resolve()) for path in fmt_sources if path.exists()]
+    if existing_fmt_sources:
+        variants.append(compile_like_flags + existing_fmt_sources + user_flags)
+    return variants
+
+
+def compile_error_text(result: subprocess.CompletedProcess[str]) -> str:
+    return f"{result.stdout}\n{result.stderr}"
+
+
+def should_retry_compile(text: str) -> bool:
+    return (
+        "No such file or directory" in text
+        or "requires" in text
+        or "only available with" in text
+        or "std::ranges" in text
+        or "views::" in text
+        or "concept" in text
+    )
+
+
+def should_retry_link(text: str) -> bool:
+    return "undefined reference to `fmt::" in text or "undefined reference to fmt::" in text
+
+
+def failure_relevance(cmd: list[str], result: subprocess.CompletedProcess[str]) -> tuple[int, int]:
+    text = compile_error_text(result)
+    joined = " ".join(cmd)
+    score = 0
+    if "-std=c++23" in joined or "-std=c++2b" in joined:
+        score += 50
+    elif "-std=c++20" in joined or "-std=c++2a" in joined:
+        score += 45
+    elif "-std=c++17" in joined:
+        score += 30
+    elif "-std=c++14" in joined:
+        score += 10
+    if "-DFMT_HEADER_ONLY" in joined:
+        score += 5
+    if "fatal error:" in text or "undefined reference" in text:
+        score += 25
+    if "no matching function" in text or "ambiguous" in text or "static assertion failed" in text:
+        score += 35
+    if "std::ranges" in text or "std::views" in text:
+        score -= 15
+    return score, -len(text)
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) < 5:
+        usage()
+        return 2
+
+    source_path = Path(argv[1]).resolve()
+    symbol_filter = argv[2]
+    function_to_trace = argv[3]
+    trace_depth = argv[4]
+    cli_compile_flags, cli_link_flags = split_optional_flags(argv[5:])
+    extra_compile_flags = shell_flags("C_TRACE_COMPILE_FLAGS") + cli_compile_flags
+    extra_link_flags = shell_flags("C_TRACE_LINK_FLAGS") + cli_link_flags
+
+    if not source_path.is_file():
+        print(f"Error: source file not found: {source_path}", file=sys.stderr)
+        return 1
+
+    source_content = source_path.read_text(encoding="utf-8", errors="replace")
+    compiler = compiler_for(source_path)
+    if shutil.which(compiler) is None or shutil.which("g++") is None:
+        print("Error: gcc/g++ toolchain is required for C/C++ tracing.", file=sys.stderr)
+        return 1
+
+    with tempfile.TemporaryDirectory(prefix="sweagent-c-trace-") as tmp:
+        tmpdir = Path(tmp)
+        tracer_path = tmpdir / "trace_runtime.cpp"
+        source_obj = tmpdir / "target.o"
+        tracer_obj = tmpdir / "trace_runtime.o"
+        binary = tmpdir / "trace_target"
+        tracer_path.write_text(TRACER_CPP, encoding="utf-8")
+
+        compile_tracer = ["g++", "-g", "-O0", "-c", str(tracer_path), "-o", str(tracer_obj)]
+
+        attempted: list[tuple[list[str], subprocess.CompletedProcess[str]]] = []
+        compile_result = None
+        used_compile_flags: list[str] = []
+        for flags in default_compile_variants(source_path, extra_compile_flags):
+            compile_source = [
+                compiler,
+                "-g",
+                "-O0",
+                "-finstrument-functions",
+                *flags,
+                "-c",
+                str(source_path),
+                "-o",
+                str(source_obj),
+            ]
+            result = run_cmd(compile_source, cwd=tmpdir)
+            attempted.append((compile_source, result))
+            if result.returncode == 0:
+                compile_result = result
+                used_compile_flags = flags
+                break
+            if not should_retry_compile(compile_error_text(result)):
+                break
+
+        if compile_result is None:
+            best_cmd, best_result = max(attempted, key=lambda item: failure_relevance(item[0], item[1]))
+            print("Error: failed command:", " ".join(best_cmd), file=sys.stderr)
+            if len(attempted) > 1:
+                print("Tried compile commands:", file=sys.stderr)
+                for cmd, result in attempted:
+                    print(f"  [{result.returncode}] {' '.join(cmd)}", file=sys.stderr)
+            print(best_result.stdout, end="")
+            print(best_result.stderr, end="", file=sys.stderr)
+            return best_result.returncode
+
+        result = run_cmd(compile_tracer, cwd=tmpdir)
+        if result.returncode != 0:
+            print("Error: failed command:", " ".join(compile_tracer), file=sys.stderr)
+            print(result.stdout, end="")
+            print(result.stderr, end="", file=sys.stderr)
+            return result.returncode
+
+        link_attempts: list[tuple[list[str], subprocess.CompletedProcess[str]]] = []
+        link_result = None
+        for flags in default_link_variants(source_path, extra_link_flags, used_compile_flags):
+            link = [
+                "g++",
+                "-rdynamic",
+                str(source_obj),
+                str(tracer_obj),
+                *flags,
+                "-ldl",
+                "-o",
+                str(binary),
+            ]
+            result = run_cmd(link, cwd=tmpdir)
+            link_attempts.append((link, result))
+            if result.returncode == 0:
+                link_result = result
+                break
+            if not should_retry_link(compile_error_text(result)):
+                break
+
+        if link_result is None:
+            last_cmd, last_result = link_attempts[-1]
+            print("Error: failed command:", " ".join(last_cmd), file=sys.stderr)
+            if len(link_attempts) > 1:
+                print("Tried link commands:", file=sys.stderr)
+                for cmd, result in link_attempts:
+                    print(f"  [{result.returncode}] {' '.join(cmd)}", file=sys.stderr)
+            print(last_result.stdout, end="")
+            print(last_result.stderr, end="", file=sys.stderr)
+            return last_result.returncode
+
+        env = os.environ.copy()
+        env["C_TRACE_TARGET"] = function_to_trace
+        env["C_TRACE_DEPTH"] = trace_depth
+        env["C_TRACE_SYMBOL_FILTER"] = symbol_filter
+        run_result = run_cmd([str(binary)], cwd=source_path.parent, env=env)
+
+    print("--- Starting C/C++ function instrumentation trace ---")
+    print(f"Target file: {source_path}")
+    print(f"Symbol filter: {symbol_filter}")
+    print(f"Local tracking function: {function_to_trace}")
+    print()
+    print("--- Target program console output ---")
+    print(run_result.stdout, end="")
+    print(f"--- Target program console output ended{' (with error)' if run_result.returncode else ''} ---")
+    if run_result.returncode:
+        print(f"Target program exit code: {run_result.returncode}", file=sys.stderr)
+    print()
+    print("<target_file>")
+    print(source_content, end="" if source_content.endswith("\n") else "\n")
+    print("</target_file>")
+    print(f"* **target_file:** `{source_path}`")
+    print("* **target_language:** `c/c++`")
+    print(f"* **symbol_filter:** `{symbol_filter}`")
+    print(f"* **function_to_trace:** `{function_to_trace}`")
+    print(f"* **trace_depth:** `{trace_depth}`")
+    print("* **Filter Level:** Trace function entry and exit events after the target symbol is entered.")
+    print()
+    print("<trace_log>")
+    print("```text")
+    trace_text = run_result.stderr.strip()
+    print(trace_text if trace_text else "# No matching C/C++ instrumentation events were captured.")
+    print("```")
+    print("</trace_log>")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

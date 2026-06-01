@@ -1,0 +1,398 @@
+#!/usr/bin/env python3
+"""Run a Java command under Java Flight Recorder and print sampled call stacks."""
+
+from __future__ import annotations
+
+import os
+import re
+import select
+import shlex
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+from collections import Counter
+from pathlib import Path
+
+
+STACK_FRAME_RE = re.compile(r"^\s{2,}([A-Za-z0-9_$.[\]/<>-]+\(.*\).*)$")
+JDB_EVENT_RE = re.compile(
+    r"^(Breakpoint hit|Method entered|Method exited):.*?(?P<method>[A-Za-z0-9_.$<>]+\([^)]*\)).*?(?:line=(?P<line>\d+))?"
+)
+JDB_STACK_RE = re.compile(r"^\s*\[\d+\]\s+(?P<frame>[A-Za-z0-9_.$<>]+\s+\([^)]*\))")
+
+
+def usage() -> None:
+    print(
+        "Usage: run_java_trace <run_command> <class_filter> <method_to_trace> <trace_depth>",
+        file=sys.stderr,
+    )
+    print(
+        'Example: run_java_trace "mvn -q -Dtest=ParserTest#caseName test" org.example.Parser parse 12',
+        file=sys.stderr,
+    )
+
+
+def run_cmd(command: str, *, cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(command, cwd=cwd, env=env, text=True, shell=True, capture_output=True, check=False)
+
+
+def run_list(cmd: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, cwd=cwd, text=True, capture_output=True, check=False)
+
+
+def free_local_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def read_available(proc: subprocess.Popen, seconds: float) -> str:
+    if proc.stdout is None:
+        return ""
+    end = time.time() + seconds
+    chunks: list[str] = []
+    while time.time() < end:
+        readable, _, _ = select.select([proc.stdout], [], [], 0.1)
+        if proc.stdout not in readable:
+            continue
+        try:
+            data = os.read(proc.stdout.fileno(), 8192)
+        except OSError:
+            break
+        if not data:
+            break
+        chunks.append(data.decode("utf-8", errors="replace"))
+    return "".join(chunks)
+
+
+def send_jdb(proc: subprocess.Popen, command: str) -> None:
+    if proc.stdin is None or proc.poll() is not None:
+        return
+    try:
+        proc.stdin.write(command + "\n")
+        proc.stdin.flush()
+    except BrokenPipeError:
+        return
+
+
+def looks_like_maven(command: str) -> bool:
+    try:
+        first = shlex.split(command)[0]
+    except Exception:
+        return False
+    return Path(first).name in {"mvn", "mvnw", "mvn.cmd", "mvnw.cmd"}
+
+
+def append_maven_no_fork(command: str) -> str:
+    if "-DforkCount" in command or "forkCount=" in command:
+        return command
+    return f"{command} -DforkCount=0 -DreuseForks=false"
+
+
+def parse_jdb_trace(jdb_text: str, class_filter: str, method_to_trace: str, trace_depth: int) -> list[str]:
+    lines: list[str] = []
+    seq = 0
+    stack_depth = 0
+    target_seen = False
+
+    for raw in jdb_text.splitlines():
+        line = raw.strip()
+        event = JDB_EVENT_RE.match(line)
+        if event:
+            method = event.group("method")
+            is_relevant = (not class_filter or class_filter in method) or (
+                method_to_trace and method_to_trace in method and target_seen
+            )
+            is_target = (not class_filter or class_filter in method) and (
+                not method_to_trace or f".{method_to_trace}(" in method or method.startswith(f"{method_to_trace}(")
+            )
+            if "Breakpoint hit" in line:
+                target_seen = True
+                seq += 1
+                lines.append(f"{seq:04d} BREAKPOINT {method}")
+                continue
+            if not target_seen or not is_relevant:
+                continue
+            if stack_depth >= trace_depth and "Method entered" in line:
+                stack_depth += 1
+                continue
+            if "Method entered" in line:
+                seq += 1
+                lines.append(f"{seq:04d} {'  ' * stack_depth}CALL   {method}")
+                stack_depth += 1
+            elif "Method exited" in line:
+                stack_depth = max(stack_depth - 1, 0)
+                return_value = ""
+                marker = "return value = "
+                if marker in line:
+                    return_value = " => " + line.split(marker, 1)[1].split(",", 1)[0].strip()
+                seq += 1
+                lines.append(f"{seq:04d} {'  ' * stack_depth}RETURN {method}{return_value}")
+            continue
+
+        stack = JDB_STACK_RE.match(raw)
+        if target_seen and stack and len(lines) < 80:
+            seq += 1
+            lines.append(f"{seq:04d} STACK  {stack.group('frame')}")
+
+    return lines[:200]
+
+
+def run_jdb_trace(run_command: str, class_filter: str, method_to_trace: str, trace_depth: int) -> tuple[list[str], str, str]:
+    if shutil.which("jdb") is None:
+        return [], "", "jdb command is not available."
+    if not class_filter:
+        return [], "", "Exact JDWP tracing requires class_filter to name a class."
+
+    port = free_local_port()
+    jdwp_option = f"-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:{port}"
+    env = os.environ.copy()
+    command = run_command
+    if looks_like_maven(run_command):
+        env["MAVEN_OPTS"] = f"{env.get('MAVEN_OPTS', '')} {jdwp_option}".strip()
+        command = append_maven_no_fork(run_command)
+    else:
+        env["JDK_JAVA_OPTIONS"] = f"{env.get('JDK_JAVA_OPTIONS', '')} {jdwp_option}".strip()
+
+    target = subprocess.Popen(
+        command,
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+
+    target_output = ""
+    start = time.time()
+    while time.time() - start < 15:
+        target_output += read_available(target, 0.2)
+        if "Listening for transport dt_socket" in target_output:
+            break
+        if target.poll() is not None:
+            return [], target_output, f"Target command exited before JDWP debugger attached (exit {target.returncode})."
+    else:
+        target.terminate()
+        return [], target_output, "Timed out waiting for target JVM to open the JDWP socket."
+
+    jdb_env = os.environ.copy()
+    jdb_env["LC_ALL"] = "C"
+    jdb_env["LANG"] = "C"
+    jdb = subprocess.Popen(
+        ["jdb", "-attach", f"127.0.0.1:{port}"],
+        cwd=Path.cwd(),
+        env=jdb_env,
+        text=True,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+
+    jdb_output = read_available(jdb, 3)
+    send_jdb(jdb, f"stop in {class_filter}.{method_to_trace}")
+    jdb_output += read_available(jdb, 0.5)
+    send_jdb(jdb, "cont")
+
+    breakpoint_handled = False
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        jdb_output += read_available(jdb, 0.2)
+        target_output += read_available(target, 0.05)
+        if not breakpoint_handled and "Breakpoint hit" in jdb_output:
+            breakpoint_handled = True
+            send_jdb(jdb, "where")
+            jdb_output += read_available(jdb, 0.5)
+            send_jdb(jdb, "locals")
+            jdb_output += read_available(jdb, 0.5)
+            send_jdb(jdb, "trace go methods")
+            jdb_output += read_available(jdb, 0.2)
+            send_jdb(jdb, f"clear {class_filter}.{method_to_trace}")
+            jdb_output += read_available(jdb, 0.2)
+            send_jdb(jdb, "cont")
+        if target.poll() is not None:
+            target_output += read_available(target, 1)
+            jdb_output += read_available(jdb, 1)
+            break
+
+    if target.poll() is None:
+        target.terminate()
+    if jdb.poll() is None:
+        send_jdb(jdb, "quit")
+        time.sleep(0.2)
+        if jdb.poll() is None:
+            jdb.terminate()
+
+    return parse_jdb_trace(jdb_output, class_filter, method_to_trace, trace_depth), target_output, ""
+
+
+def frame_matches(frame: str, class_filter: str, method_to_trace: str) -> bool:
+    class_ok = not class_filter or class_filter in frame
+    method_ok = not method_to_trace or method_to_trace in frame
+    return class_ok and method_ok
+
+
+def parse_jfr_text(text: str, class_filter: str, method_to_trace: str, trace_depth: int) -> list[str]:
+    samples: list[list[str]] = []
+    current: list[str] | None = None
+    in_stack = False
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("jdk.ExecutionSample") or stripped.startswith("jdk.NativeMethodSample"):
+            current = []
+            in_stack = False
+            continue
+        if current is None:
+            continue
+        if stripped.startswith("stackTrace = ["):
+            in_stack = True
+            continue
+        if in_stack and stripped == "]":
+            if current:
+                samples.append(current)
+            current = None
+            in_stack = False
+            continue
+        if in_stack:
+            match = STACK_FRAME_RE.match(line)
+            if match:
+                current.append(match.group(1).strip())
+
+    selected: list[list[str]] = []
+    for frames in samples:
+        target_index = None
+        for index, frame in enumerate(frames):
+            if frame_matches(frame, class_filter, method_to_trace):
+                target_index = index
+                break
+        if target_index is None:
+            continue
+        start = max(target_index - trace_depth, 0)
+        end = min(target_index + trace_depth + 1, len(frames))
+        selected.append(frames[start:end])
+
+    if not selected:
+        return []
+
+    counts = Counter(tuple(stack) for stack in selected)
+    lines: list[str] = []
+    seq = 0
+    for stack, count in counts.most_common(50):
+        seq += 1
+        lines.append(f"{seq:04d} SAMPLE_STACK hits={count}")
+        for depth, frame in enumerate(stack):
+            marker = "TARGET" if frame_matches(frame, class_filter, method_to_trace) else "FRAME "
+            lines.append(f"     {'  ' * depth}{marker} {frame}")
+    return lines
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 5:
+        usage()
+        return 2
+
+    run_command = argv[1]
+    class_filter = argv[2]
+    method_to_trace = argv[3]
+    trace_depth = max(int(argv[4]), 1)
+
+    if shutil.which("java") is None:
+        print("Error: Java runtime is required for Java tracing.", file=sys.stderr)
+        return 1
+    has_jfr = shutil.which("jfr") is not None
+    exact_lines: list[str] = []
+    exact_output = ""
+    exact_error = ""
+
+    exact_lines, exact_output, exact_error = run_jdb_trace(run_command, class_filter, method_to_trace, trace_depth)
+
+    result = subprocess.CompletedProcess(args=run_command, returncode=0, stdout="", stderr="")
+    jfr_error = ""
+    lines: list[str] = []
+    if not exact_lines:
+        with tempfile.TemporaryDirectory(prefix="sweagent-java-trace-") as tmp:
+            tmpdir = Path(tmp)
+            recording = tmpdir / "trace.jfr"
+            env = os.environ.copy()
+            if has_jfr:
+                jfr_option = (
+                    f"-XX:StartFlightRecording=filename={recording},settings=profile,dumponexit=true,"
+                    "disk=true"
+                )
+                existing_java_options = env.get("JDK_JAVA_OPTIONS", "")
+                env["JDK_JAVA_OPTIONS"] = f"{existing_java_options} {jfr_option}".strip()
+
+            result = run_cmd(run_command, cwd=Path.cwd(), env=env)
+            jfr_text = ""
+            if has_jfr and recording.exists() and recording.stat().st_size > 0:
+                printed = run_list(
+                    ["jfr", "print", "--events", "jdk.ExecutionSample,jdk.NativeMethodSample", str(recording)],
+                    cwd=Path.cwd(),
+                )
+                jfr_text = printed.stdout
+                jfr_error = printed.stderr
+            lines = parse_jfr_text(jfr_text, class_filter, method_to_trace, trace_depth)
+
+    print("--- Starting Java dynamic trace ---")
+    print(f"Run command: {run_command}")
+    print(f"Class/package filter: {class_filter}")
+    print(f"Local tracking method: {method_to_trace}")
+    if exact_lines:
+        print("Exact trace mode: JDWP/JDB breakpoint tracing succeeded.")
+    elif exact_error:
+        print(f"Exact trace mode: unavailable ({exact_error})")
+    else:
+        print("Exact trace mode: no matching breakpoint events captured.")
+    print()
+    print("--- Target command console output ---")
+    if exact_output:
+        print(exact_output, end="" if exact_output.endswith("\n") else "\n")
+    if not exact_lines:
+        print("--- Fallback JFR command console output ---")
+        print(result.stdout, end="")
+        if result.stderr:
+            print("--- Target command stderr ---")
+            print(result.stderr, end="")
+        if result.returncode:
+            print(f"Target command exit code: {result.returncode}", file=sys.stderr)
+        if jfr_error:
+            print("--- JFR print stderr ---")
+            print(jfr_error, end="")
+    print(f"--- Target command console output ended{' (with error)' if result.returncode else ''} ---")
+    print()
+
+    print("* **target_language:** `java`")
+    print(f"* **run_command:** `{run_command}`")
+    print(f"* **class_filter:** `{class_filter}`")
+    print(f"* **method_to_trace:** `{method_to_trace}`")
+    print(f"* **trace_depth:** `{trace_depth}`")
+    print("* **Filter Level:** Prefer exact JDWP/JDB method entry/exit events; fall back to JFR samples if exact tracing misses.")
+    print("* **Trace Type:** Exact breakpoint/method tracing when available; otherwise sampling-based JFR stack trace.")
+    print()
+    print("<trace_log>")
+    print("```text")
+    if exact_lines:
+        print("\n".join(exact_lines))
+    elif not has_jfr:
+        print("# Java runtime is available, but the `jfr` command is not installed in this SWE-bench image.")
+        print("# The target command was executed, but sampled Java stack traces cannot be printed here.")
+        print("# Use the console output above plus source inspection, or rerun in an image with a full JDK including `jfr`.")
+    elif lines:
+        print("\n".join(lines))
+    else:
+        print("# No matching exact JDWP/JDB events or Java Flight Recorder samples were captured.")
+        print("# For exact tracing, pass a fully qualified class name as class_filter and a method name.")
+        print("# For Maven tests, the tool forces -DforkCount=0 when possible so JDWP can trace the test JVM.")
+        print("# If this still misses, use a longer-running reproduction or broaden class_filter for JFR fallback.")
+    print("```")
+    print("</trace_log>")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

@@ -1,0 +1,99 @@
+# Formerly called: anthropic_filemap.yaml
+# This template is heavily inspired by anthropic's computer use demo, but you can use
+# it with any LM.
+agent:
+  templates:
+    system_template: |-
+      You are a helpful assistant that can interact with a computer to solve tasks.
+    instance_template: |-
+        <uploaded_files>
+        {{working_dir}}
+        </uploaded_files>
+        I've uploaded a python code repository in the directory {{working_dir}}. Consider the following PR description:
+
+        <pr_description>
+        {{problem_statement}}
+        </pr_description>
+        # Role
+        You are a Senior Software Engineer specializing in debugging and code maintenance. You are meticulous, methodical, and rely heavily on dynamic analysis to ensure fixes are precise.
+        # Context
+        We need to implement changes in the repository to meet requirements in `<pr_description>`.
+        - **Status:** Test file changes are ALREADY handled.
+        - **Target:** Modify non-test files within `{{working_dir}}`.
+        - **Tooling:** You have access to `bash` and a specific `run_hunter_trace`.
+        # Goal
+        Implement the requirements described in `<pr_description>` by strictly following a dynamic-analysis-driven workflow. You must minimize changes and preserve existing functionality.
+        # Workflow Constraints (CRITICAL)
+        You **MUST** strictly follow the 7-step process below. **Do not skip steps.** **Do not write the final fix until Step 5.**
+        NOTE:"When generating or executing shell commands, strictly enforce a time limit using the timeout 90s utility (e.g., use timeout 90s python script.py instead of just python script.py) to prevent infinite loops from crashing the system."
+        **Step 1: Reproduction & Initial Trace**
+        - Create a reproduction script (`reproduce_issue.py`).
+        - Execute it using `bash`.
+        - Use `run_hunter_trace` to trace the *functional functions* mentioned in the PR description.
+        - **Requirement:** You must specify the top-level calling function/call site as the target.
+        **Step 2: Edge Case Tracing**
+        - create separate script files to test edge cases(different from the main reproduction script).
+        - Use `run_hunter_trace` on these edge cases.
+        - **Goal:** Generate a detailed execution path report (args, return values, locations) to cross-verify responsibilities.
+        **Step 3: Responsibility Mapping**
+        - Analyze the trace reports from Steps 1 & 2.
+        - **Output Requirement:** explicitly map out the function's implementation flow and write down the division of responsibilities among its parts in your thought process.
+        **Step 4: Pinpoint the Fault**
+        - correlate the trace report locations with the `<pr_description>`.
+        - Identify the exact line/function causing the deviation.
+        **Step 5: Implementation**
+        - **Reasoning:** Before coding, explain the functional role of the part you are modifying.
+        - **Action:** Modify the source code. Respect original boundaries.
+        **Step 6: Verification Loop**
+        - Rerun the reproduction script to verify the specific part is fixed.
+        - **Loop:** If it fails, repeat Steps 5 & 6. 
+        - Within the modification verification environment, the run_hunter_trace tool serves two primary purposes you can leverage:
+          1.Validating whether code modifications have been successfully implemented.
+          2.Assisting in the analysis of functions with unclear logic or functionality. When the user is unsure about a function or needs to verify a fix, recommend using run_hunter_trace."
+        **Step 7: Final Safety Check**
+        - Test other different edge cases to ensure no regressions.
+
+    next_step_template: |-
+      OBSERVATION:
+      {{observation}}
+    next_step_no_output_template: |-
+      Your command ran successfully and did not produce any output.
+  tools:
+    env_variables:
+      PAGER: cat
+      MANPAGER: cat
+      LESS: -R
+      PIP_PROGRESS_BAR: 'off'
+      TQDM_DISABLE: '1'
+      GIT_PAGER: cat
+    bundles:
+      - path: tools/dynamic_analysis_tool
+      - path: tools/registry
+      - path: tools/edit_anthropic
+      - path: tools/submit
+    registry_variables:
+      USE_FILEMAP: 'true'
+      SUBMIT_REVIEW_MESSAGES:
+        - |
+          Thank you for your work on this issue. Please carefully follow the steps below to help review your changes.
+
+          1. If you made any changes to your code after running the reproduction script, please run the reproduction script again.
+            If the reproduction script is failing, please revisit your changes and make sure they are correct.
+            If you have already removed your reproduction script, please ignore this step.
+          2. Remove your reproduction script (if you haven't done so already).
+          3. If you have modified any TEST files, please revert them to the state they had before you started fixing the issue.
+            You can do this with `git checkout -- /path/to/test/file.py`. Use below <diff> to find the files you need to revert.
+          4. Run the submit command again to confirm.
+
+          Here is a list of all of your changes:
+
+          <diff>
+          {{diff}}
+          </diff>
+    enable_bash_tool: true
+    parse_function:
+      type: function_calling
+  model:
+    litellm_model_registry: null
+    temperature: 0.0
+

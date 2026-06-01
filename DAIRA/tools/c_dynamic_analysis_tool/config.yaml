@@ -1,0 +1,65 @@
+tools:
+  run_c_trace:
+    signature: |
+      run_c_trace <source_path> <symbol_filter> <function_to_trace> <trace_depth> [<compile_flags>] [<link_flags>]
+    docstring: >
+      **Description:**
+      Compiles a C or C++ reproduction file with `-finstrument-functions` and emits an
+      LLM-friendly function entry/exit trace. Use this for C/C++ repositories when
+      runtime control flow is unclear.
+      **Capabilities:**
+      1. Starts tracing when `function_to_trace` is entered.
+      2. Records function `CALL` and `RETURN` events.
+      3. Demangles C++ symbols when possible.
+      4. Filters displayed frames by `symbol_filter` to reduce noise.
+      5. Automatically adds common project include directories such as `/testbed/include`.
+      6. For fmt-style repositories, automatically tries `-DFMT_HEADER_ONLY` and common C++ standards.
+      **Parameter Configuration:**
+      1. **`source_path`**: Absolute path to a minimal C/C++ reproduction source file.
+      2. **`symbol_filter`**: Symbol substring to display, such as `Parser`, `solve`, or an empty string if needed.
+          Use `|` to match several alternatives, for example `write|format|formatter`.
+      3. **`function_to_trace`**: Function/symbol substring where tracing should start.
+      4. **`trace_depth`**: Maximum nested function depth to record after tracing starts.
+      5. **`compile_flags`** (optional): Extra compiler flags as one shell-style string,
+          for example `"-std=c++20 -I include -DFMT_HEADER_ONLY"`.
+      6. **`link_flags`** (optional): Extra linker flags or extra source files as one shell-style string,
+          for example `"-lm"` or `"src/format.cc src/os.cc"`.
+      **Advanced Flags:**
+      * If the reproduction needs extra flags, set `C_TRACE_COMPILE_FLAGS` or `C_TRACE_LINK_FLAGS`
+        before calling the tool.
+      * The command also accepts optional CLI flags after the required arguments:
+        `run_c_trace file.cpp filter main 20 -- -DFOO=1 -I extra/include --link -lmylib`.
+      * You can also pass these as positional strings:
+        `run_c_trace file.cpp filter main 20 "-std=c++20 -I include" "src/format.cc src/os.cc"`.
+      **Strict Usage Rules:**
+      * Use a small single-file reproduction program when possible.
+      * The source file should be compilable by `gcc` or `g++`; use the advanced flags above
+        when project-specific include or link options are required.
+      * For project-specific libraries, create a reproduction source that includes/links the needed code or use this tool after simplifying the target.
+    arguments:
+      - name: source_path
+        type: string
+        description: "Absolute path to the target C/C++ reproduction source file."
+        required: true
+      - name: symbol_filter
+        type: string
+        description: "Only display trace frames whose demangled symbol contains this substring."
+        required: true
+      - name: function_to_trace
+        type: string
+        description: "Function/symbol substring that starts tracing."
+        required: true
+      - name: trace_depth
+        type: integer
+        description: "Maximum nested function depth to record."
+        required: true
+      - name: compile_flags
+        type: string
+        description: "Optional shell-style extra compiler flags, e.g. `-std=c++20 -I include`."
+        required: false
+        argument_format: "--compile-flags={{value}}"
+      - name: link_flags
+        type: string
+        description: "Optional shell-style extra linker flags or extra source files, e.g. `src/format.cc src/os.cc -lm`."
+        required: false
+        argument_format: "--link-flags={{value}}"

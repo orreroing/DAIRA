@@ -1,0 +1,43 @@
+tools:
+  run_java_trace:
+    signature: |
+      run_java_trace <run_command> <class_filter> <method_to_trace> <trace_depth>
+    docstring: >
+      **Description:**
+      Runs a Java command with exact JDWP/JDB breakpoint tracing first, and
+      falls back to Java Flight Recorder sampled call stacks if exact tracing
+      cannot capture the target. Use this for Java repositories when runtime
+      execution paths are unclear.
+      **Capabilities:**
+      1. Executes an arbitrary Java/Maven/Gradle reproduction command.
+      2. Uses JDB breakpoints to catch short methods that JFR sampling often misses.
+      3. Records method entry/exit events and return values exposed by JDB when exact tracing works.
+      4. Enables JFR as a fallback without modifying project source code.
+      5. Filters stacks around frames matching a package/class substring and method substring.
+      **Limitations:**
+      * Exact tracing works best when `class_filter` is the concrete fully qualified class name.
+      * For Maven tests, the tool may force `-DforkCount=0 -DreuseForks=false` so JDWP can trace the test JVM.
+      * If exact tracing cannot attach or hit the breakpoint, the fallback is sampling-based JFR.
+      * JFR fallback may still miss very fast methods, and does not capture return values or local variables.
+      **Parameter Configuration:**
+      1. **`run_command`**: Shell command that runs the Java reproduction, such as `mvn -q -Dtest=FooTest#bar test`.
+      2. **`class_filter`**: Prefer the exact class name for JDWP, such as `org.example.Parser`; broader package substrings are only useful for JFR fallback.
+      3. **`method_to_trace`**: Method name to break on and trace.
+      4. **`trace_depth`**: Maximum method/stack depth to display.
+    arguments:
+      - name: run_command
+        type: string
+        description: "Shell command that runs the Java reproduction."
+        required: true
+      - name: class_filter
+        type: string
+        description: "Prefer the exact Java class name for JDWP tracing; package substrings are used by JFR fallback."
+        required: true
+      - name: method_to_trace
+        type: string
+        description: "Method name to break on and trace."
+        required: true
+      - name: trace_depth
+        type: integer
+        description: "Maximum method/stack depth to display."
+        required: true

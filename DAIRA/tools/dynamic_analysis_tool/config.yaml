@@ -1,0 +1,41 @@
+tools:
+  run_hunter_trace:
+    signature: |
+      run_hunter_trace <script_path> <module_prefix> <function_to_trace> <trace_depth>
+    docstring: >
+      **Description:**
+      Executes `run_hunter_trace` to generate a visual, step-by-step ASCII execution tree of a specific function call. Use this to understand internal logic, recursion, and return values.
+      **Capabilities:**
+      1.  **Visual Flow:** Renders complex nested calls into a numbered ASCII tree (├─ / └─).
+      2.  **Targeted Scope:** Starts tracing strictly when `function_to_trace` is called and stops upon its return.
+      3.  **Data Report:** Logs call order, arguments, and return values for each step.
+      **Parameter Configuration (CRITICAL):**
+      1.  **`script_path`** (str): Absolute path to the Python script.
+          * *Example:* `/data/home/user/repo/reproduce_issue.py`
+      2.  **`module_prefix`** (str): **MUST BE SPECIFIC.** The folder/module keyword to filter traces.
+          * *Constraint:* DO NOT use root directories. Narrow down to the specific library or subfolder to prevent data overflow.
+          * *Example:* `repo/core_logic` (Good) vs `repo` (Too broad).
+      3.  **`function_to_trace`** (str): The **Top-Level** function name to track.
+          * *Constraint:* Must be a standalone function name string. DO NOT include class names (e.g., use `my_func`, NOT `MyClass.my_func`).
+      4.  **`trace_depth`** (int): Detail level of the call stack.
+          * *Recommendation:* Start with **10**. Increase only if deep internal calls are missing.
+      **Strict Usage Rules:**
+      * **Target Selection:** The script to be traced should be simple and single-use (e.g., a minimal reproduction script); tracing complex files generates excessive noise and causes the trace to fail.
+      * **Scope Control:** If the result is too large or times out, you MUST narrow the `module_prefix` or reduce `trace_depth`.
+    arguments:
+      - name: script_path
+        type: string
+        description: "The absolute path to the target Python script to be traced. Example: '/data/home/user/repo/reproduce_issue.py'"
+        required: true
+      - name: module_prefix
+        type: string
+        description: "The module/filename keyword for Hunter filtering (Q(filename_contains=...)). Example: 'repo/function_fold' (for a library)"
+        required: true
+      - name: function_to_trace
+        type: string
+        description: The name of the key function directly called in the target script you need to track. (It must be the function name only, not a class or other property)
+        required: true
+      - name: trace_depth
+        type: integer
+        description:  The depth level of calls that need to be recorded. The higher the number of recorded call layers, the more call information will be retained. Please try starting with a larger value (10). If the value is too high, resulting in excessive data volume, the system will provide feedback.
+        required: true

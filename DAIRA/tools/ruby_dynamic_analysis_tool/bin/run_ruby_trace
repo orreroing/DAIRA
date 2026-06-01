@@ -1,0 +1,168 @@
+#!/usr/bin/env ruby
+# Trace a Ruby script with TracePoint and emit a compact, LLM-friendly report.
+
+require "shellwords"
+
+def usage
+  warn "Usage: run_ruby_trace <script_path> <file_filter> <method_to_trace> <trace_depth>"
+  warn "Example: run_ruby_trace /testbed/reproduce_issue.rb lib/my_gem target_method 12"
+end
+
+def read_file(path)
+  return nil unless File.file?(path)
+
+  File.read(path, encoding: "UTF-8")
+rescue StandardError => e
+  warn "Error reading #{path}: #{e.class}: #{e.message}"
+  nil
+end
+
+def path_matches?(path, filter)
+  return true if filter.nil? || filter.empty?
+
+  path.include?(filter)
+end
+
+def format_location(tp)
+  "#{tp.path}:#{tp.lineno}"
+end
+
+def format_method(tp)
+  owner = tp.defined_class ? "#{tp.defined_class}#" : ""
+  "#{owner}#{tp.method_id}"
+end
+
+def safe_inspect(value, max_len = 220)
+  text = value.inspect
+  text.length > max_len ? "#{text[0, max_len]}..." : text
+rescue StandardError
+  "<inspect unavailable>"
+end
+
+def run_ruby_trace(script_path, file_filter, method_to_trace, trace_depth)
+  file_content = read_file(script_path)
+  unless file_content
+    warn "Error: target script not found or unreadable: #{script_path}"
+    return 1
+  end
+
+  trace_depth = trace_depth.to_i
+  trace_depth = 10 if trace_depth <= 0
+
+  puts "--- Starting Ruby TracePoint ---"
+  puts "Target file: #{script_path}"
+  puts "Tracking file filter: #{file_filter}"
+  puts "Local tracking method: #{method_to_trace}"
+  puts
+  puts "--- Target script console output ---"
+
+  trace_lines = []
+  active = false
+  depth = 0
+  sequence = 0
+  tracer = nil
+
+  tracer = TracePoint.new(:call, :return, :raise) do |tp|
+    if !active
+      next unless tp.event == :call && tp.method_id.to_s == method_to_trace
+
+      active = true
+      depth = 0
+    end
+
+    within_depth = depth < trace_depth
+    in_scope = path_matches?(tp.path, file_filter)
+
+    case tp.event
+    when :call
+      if within_depth && in_scope
+        sequence += 1
+        indent = "  " * depth
+        trace_lines << format("%04d %sCALL   %s (%s)", sequence, indent, format_method(tp), format_location(tp))
+      end
+      depth += 1
+    when :return
+      depth -= 1 if depth > 0
+      if depth < trace_depth && in_scope
+        sequence += 1
+        indent = "  " * depth
+        trace_lines << format(
+          "%04d %sRETURN %s => %s (%s)",
+          sequence,
+          indent,
+          format_method(tp),
+          safe_inspect(tp.return_value),
+          format_location(tp),
+        )
+      end
+      if depth == 0 && tp.method_id.to_s == method_to_trace
+        tracer.disable
+      end
+    when :raise
+      if within_depth && in_scope
+        sequence += 1
+        indent = "  " * depth
+        exc = tp.raised_exception
+        trace_lines << format(
+          "%04d %sRAISE  %s: %s (%s)",
+          sequence,
+          indent,
+          exc.class,
+          exc.message,
+          format_location(tp),
+        )
+      end
+    end
+  end
+
+  old_argv = ARGV.dup
+  ARGV.replace([script_path])
+  script_error = nil
+
+  begin
+    tracer.enable do
+      load script_path
+    end
+  rescue SystemExit => e
+    script_error = e
+  rescue Exception => e # rubocop:disable Lint/RescueException
+    script_error = e
+  ensure
+    ARGV.replace(old_argv)
+  end
+
+  puts "--- Target script console output ended#{script_error ? ' (with error)' : ''} ---"
+  warn "Target script raised #{script_error.class}: #{script_error.message}" if script_error
+  puts
+
+  puts "<target_file>"
+  puts file_content
+  puts "</target_file>"
+  puts "* **target_file:** `#{script_path}`"
+  puts "* **target_language:** `ruby`"
+  puts "* **file_filter:** `#{file_filter}`"
+  puts "* **method_to_trace:** `#{method_to_trace}`"
+  puts "* **trace_depth:** `#{trace_depth}`"
+  puts "* **Filter Level:** Trace `call`, `return`, and `raise` events after the target Ruby method is called."
+  puts
+  puts "<trace_log>"
+  puts "```text"
+  if trace_lines.empty?
+    puts "# No matching Ruby TracePoint events were captured."
+  else
+    puts trace_lines.join("\n")
+  end
+  puts "```"
+  puts "</trace_log>"
+
+  0
+end
+
+if __FILE__ == $PROGRAM_NAME
+  if ARGV.length != 4
+    usage
+    exit 2
+  end
+
+  exit run_ruby_trace(ARGV[0], ARGV[1], ARGV[2], ARGV[3])
+end
