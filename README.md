@@ -57,5 +57,7 @@ This section corresponds to the quantitative evaluation of the framework:
         * DAIRA(ours)
         * SWE-agent(baseline)
 
+Additional data prepared for the rebuttal are included in `traj/`.
+
 ### 4. 📢 Code Availability
 The released source code is available under **`DAIRA/`**. The implementation includes the DAIRA runtime, dynamic analysis tools, core configuration files, and a reproducible test-repo example. Please refer to **`DAIRA/README.md`** for setup and running instructions.
