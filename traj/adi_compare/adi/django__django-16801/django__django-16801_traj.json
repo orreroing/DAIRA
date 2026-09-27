@@ -1,0 +1,110 @@
+[
+  {
+    "step": 1,
+    "thought": "I'll start by exploring the repository structure and finding the relevant ImageField code.",
+    "action": "",
+    "observation": ""
+  },
+  {
+    "step": 2,
+    "thought": "",
+    "action": "cd /testbed && git log --oneline -3 && grep -n \"class ImageField\" django/db/models/fields/files.py",
+    "observation": "3b62d8c83e (HEAD) Refs #31369 -- Improved hint message in NullBooleanField's deprecation warning.\n506f93f0c3 Fixed #34530 -- Improved docs when customizing storage for FileField.\nc61219a7ae Fixed #34513 -- Added system check for relational fields in ModelAdmin.list_display.\n382:class ImageFieldFile(ImageFile, FieldFile):\n390:class ImageField(FileField):\n"
+  },
+  {
+    "step": 3,
+    "thought": "",
+    "action": "cd /testbed && sed -n '375,480p' django/db/models/fields/files.py",
+    "observation": "        # hooked up to the post_init signal handles the Model.__init__() cases.\n        # Assignment happening outside of Model.__init__() will trigger the\n        # update right here.\n        if previous_file is not None:\n            self.field.update_dimension_fields(instance, force=True)\n\n\nclass ImageFieldFile(ImageFile, FieldFile):\n    def delete(self, save=True):\n        # Clear the image dimensions cache\n        if hasattr(self, \"_dimensions_cache\"):\n            del self._dimensions_cache\n        super().delete(save)\n\n\nclass ImageField(FileField):\n    attr_class = ImageFieldFile\n    descriptor_class = ImageFileDescriptor\n    description = _(\"Image\")\n\n    def __init__(\n        self,\n        verbose_name=None,\n        name=None,\n        width_field=None,\n        height_field=None,\n        **kwargs,\n    ):\n        self.width_field, self.height_field = width_field, height_field\n        super().__init__(verbose_name, name, **kwargs)\n\n    def check(self, **kwargs):\n        return [\n            *super().check(**kwargs),\n            *self._check_image_library_installed(),\n        ]\n\n    def _check_image_library_installed(self):\n        try:\n            from PIL import Image  # NOQA\n        except ImportError:\n            return [\n                checks.Error(\n                    \"Cannot use ImageField because Pillow is not installed.\",\n                    hint=(\n                        \"Get Pillow at https://pypi.org/project/Pillow/ \"\n                        'or run command \"python -m pip install Pillow\".'\n                    ),\n                    obj=self,\n                    id=\"fields.E210\",\n                )\n            ]\n        else:\n            return []\n\n    def deconstruct(self):\n        name, path, args, kwargs = super().deconstruct()\n        if self.width_field:\n            kwargs[\"width_field\"] = self.width_field\n        if self.height_field:\n            kwargs[\"height_field\"] = self.height_field\n        return name, path, args, kwargs\n\n    def contribute_to_class(self, cls, name, **kwargs):\n        super().contribute_to_class(cls, name, **kwargs)\n        # Attach update_dimension_fields so that dimension fields declared\n        # after their corresponding image field don't stay cleared by\n        # Model.__init__, see bug #11196.\n        # Only run post-initialization dimension update on non-abstract models\n        if not cls._meta.abstract:\n            signals.post_init.connect(self.update_dimension_fields, sender=cls)\n\n    def update_dimension_fields(self, instance, force=False, *args, **kwargs):\n        \"\"\"\n        Update field's width and height fields, if defined.\n\n        This method is hooked up to model's post_init signal to update\n        dimensions after instantiating a model instance.  However, dimensions\n        won't be updated if the dimensions fields are already populated.  This\n        avoids unnecessary recalculation when loading an object from the\n        database.\n\n        Dimensions can be forced to update with force=True, which is how\n        ImageFileDescriptor.__set__ calls this method.\n        \"\"\"\n        # Nothing to update if the field doesn't have dimension fields or if\n        # the field is deferred.\n        has_dimension_fields = self.width_field or self.height_field\n        if not has_dimension_fields or self.attname not in instance.__dict__:\n            return\n\n        # getattr will call the ImageFileDescriptor's __get__ method, which\n        # coerces the assigned value into an instance of self.attr_class\n        # (ImageFieldFile in this case).\n        file = getattr(instance, self.attname)\n\n        # Nothing to update if we have no file and not being forced to update.\n        if not file and not force:\n            return\n\n        dimension_fields_filled = not (\n            (self.width_field and not getattr(instance, self.width_field))\n            or (self.height_field and not getattr(instance, self.height_field))\n        )\n        # When both dimension fields have values, we are most likely loading\n        # data from the database or updating an image field that already had\n"
+  },
+  {
+    "step": 4,
+    "thought": "",
+    "action": "cd /testbed && grep -rn \"post_init\\|update_dimension_fields\\|width_field\" tests/model_fields/test_imagefield.py | head -60",
+    "observation": "98:        width_field_name = field_name + \"_width\"\n99:        if hasattr(instance, width_field_name):\n100:            self.assertEqual(getattr(instance, width_field_name), width)\n"
+  },
+  {
+    "step": 5,
+    "thought": "",
+    "action": "cd /testbed && grep -rn \"ImageField\\|width_field\\|height_field\" tests/model_fields/test_imagefield.py | grep -i \"signal\\|connect\\|abstract\\|no_width\"",
+    "observation": ""
+  },
+  {
+    "step": 6,
+    "thought": "",
+    "action": "cd /testbed && git status && git diff HEAD --stat",
+    "observation": "HEAD detached at 3b62d8c83e\nnothing to commit, working tree clean\n"
+  },
+  {
+    "step": 7,
+    "thought": "",
+    "action": "cd /testbed && grep -n \"get_connection\\|post_init\\|receivers\\|connect\" tests/model_fields/test_imagefield.py",
+    "observation": ""
+  },
+  {
+    "step": 8,
+    "thought": "",
+    "action": "cd /testbed && cat > /tmp/repro.py << 'EOF'\nimport django\nfrom django.conf import settings\nsettings.configure(INSTALLED_APPS=[], DATABASES={})\ndjango.setup()\n\nfrom django.db import models\nfrom django.db.models import signals\n\nclass MyModel(models.Model):\n    image = models.ImageField(upload_to='x')\n\nclass DimModel(models.Model):\n    image = models.ImageField(upload_to='x', width_field='w', height_field='h')\n    w = models.IntegerField()\n    h = models.IntegerField()\n\nrecs = signals.post_init._live_receivers(MyModel)\nprint(\"MyModel receivers (should be empty):\", recs)\nrecs2 = signals.post_init._live_receivers(DimModel)\nprint(\"DimModel receivers (should have one):\", recs2)\nEOF\npython /tmp/repro.py",
+    "observation": "Traceback (most recent call last):\n  File \"/tmp/repro.py\", line 9, in <module>\n    class MyModel(models.Model):\n  File \"/testbed/django/db/models/base.py\", line 134, in __new__\n    raise RuntimeError(\nRuntimeError: Model class __main__.MyModel doesn't declare an explicit app_label and isn't in an application in INSTALLED_APPS.\n"
+  },
+  {
+    "step": 9,
+    "thought": "",
+    "action": "cd /testbed && cat > /tmp/repro.py << 'EOF'\nimport django\nfrom django.conf import settings\nsettings.configure(INSTALLED_APPS=['django.contrib.contenttypes', 'django.contrib.auth'], DATABASES={})\ndjango.setup()\n\nfrom django.db import models\nfrom django.db.models import signals\n\nclass MyModel(models.Model):\n    image = models.ImageField(upload_to='x')\n    class Meta:\n        app_label = 'auth'\n\nclass DimModel(models.Model):\n    image = models.ImageField(upload_to='x', width_field='w', height_field='h')\n    w = models.IntegerField()\n    h = models.IntegerField()\n    class Meta:\n        app_label = 'auth'\n\nrecs = signals.post_init._live_receivers(MyModel)\nprint(\"MyModel receivers (should be empty):\", recs)\nrecs2 = signals.post_init._live_receivers(DimModel)\nprint(\"DimModel receivers (should have one):\", recs2)\nEOF\npython /tmp/repro.py",
+    "observation": "MyModel receivers (should be empty): ([<bound method ImageField.update_dimension_fields of <django.db.models.fields.files.ImageField: image>>], [])\nDimModel receivers (should have one): ([<bound method ImageField.update_dimension_fields of <django.db.models.fields.files.ImageField: image>>], [])\n"
+  },
+  {
+    "step": 10,
+    "thought": "",
+    "action": "str_replace_editor str_replace /testbed/django/db/models/fields/files.py   --old_str $'        # Attach update_dimension_fields so that dimension fields declared\\n        # after their corresponding image field don\\'t stay cleared by\\n        # Model.__init__, see bug #11196.\\n        # Only run post-initialization dimension update on non-abstract models\\n        if not cls._meta.abstract:\\n            signals.post_init.connect(self.update_dimension_fields, sender=cls)' --new_str $'        # Attach update_dimension_fields so that dimension fields declared\\n        # after their corresponding image field don\\'t stay cleared by\\n        # Model.__init__, see bug #11196.\\n        # Only run post-initialization dimension update on non-abstract models\\n        # with width_field/height_field.\\n        if not cls._meta.abstract and (self.width_field or self.height_field):\\n            signals.post_init.connect(self.update_dimension_fields, sender=cls)'",
+    "observation": "The file /testbed/django/db/models/fields/files.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/django/db/models/fields/files.py:\n   435\t            kwargs[\"height_field\"] = self.height_field\n   436\t        return name, path, args, kwargs\n   437\t\n   438\t    def contribute_to_class(self, cls, name, **kwargs):\n   439\t        super().contribute_to_class(cls, name, **kwargs)\n   440\t        # Attach update_dimension_fields so that dimension fields declared\n   441\t        # after their corresponding image field don't stay cleared by\n   442\t        # Model.__init__, see bug #11196.\n   443\t        # Only run post-initialization dimension update on non-abstract models\n   444\t        # with width_field/height_field.\n   445\t        if not cls._meta.abstract and (self.width_field or self.height_field):\n   446\t            signals.post_init.connect(self.update_dimension_fields, sender=cls)\n   447\t\n   448\t    def update_dimension_fields(self, instance, force=False, *args, **kwargs):\n   449\t        \"\"\"\nReview the changes and make sure they are as expected. Edit the file again if necessary.\n"
+  },
+  {
+    "step": 11,
+    "thought": "",
+    "action": "cd /testbed && python /tmp/repro.py",
+    "observation": "MyModel receivers (should be empty): ([], [])\nDimModel receivers (should have one): ([<bound method ImageField.update_dimension_fields of <django.db.models.fields.files.ImageField: image>>], [])\n"
+  },
+  {
+    "step": 12,
+    "thought": "",
+    "action": "cd /testbed && python -c \"import PIL; print(PIL.__version__)\" && python tests/runtests.py model_fields.test_imagefield --parallel=1 2>&1 | tail -20",
+    "observation": "10.4.0\nCreating test database for alias 'default'...\nTesting against Django installed in '/testbed/django'\nFound 46 test(s).\nSystem check identified no issues (0 silenced).\n..............................................\n----------------------------------------------------------------------\nRan 46 tests in 0.077s\n\nOK\nDestroying test database for alias 'default'...\n"
+  },
+  {
+    "step": 13,
+    "thought": "",
+    "action": "cd /testbed && python tests/runtests.py model_fields.test_files model_fields.test_imagefield --parallel=1 2>&1 | tail -8",
+    "observation": "ModuleNotFoundError: No module named 'model_fields.test_files'\n\n\n----------------------------------------------------------------------\nRan 47 tests in 0.069s\n\nFAILED (errors=1)\nDestroying test database for alias 'default'...\n"
+  },
+  {
+    "step": 14,
+    "thought": "",
+    "action": "cd /testbed && python tests/runtests.py model_fields.test_imagefield file_storage --parallel=1 2>&1 | tail -8",
+    "observation": "Found 229 test(s).\nSystem check identified no issues (0 silenced).\n.....................................................................................................................................................................................................................................\n----------------------------------------------------------------------\nRan 229 tests in 2.239s\n\nOK\nDestroying test database for alias 'default'...\n"
+  },
+  {
+    "step": 15,
+    "thought": "The fix is confirmed working. Let me run a final edge-case check for width_field-only and height_field-only configurations:",
+    "action": "cd /testbed && cat > /tmp/edge.py << 'EOF'\nimport django\nfrom django.conf import settings\nsettings.configure(INSTALLED_APPS=['django.contrib.contenttypes', 'django.contrib.auth'], DATABASES={})\ndjango.setup()\nfrom django.db import models\nfrom django.db.models import signals\n\nclass W(models.Model):\n    image = models.ImageField(upload_to='x', width_field='w')\n    w = models.IntegerField()\n    class Meta: app_label = 'auth'\n\nclass H(models.Model):\n    image = models.ImageField(upload_to='x', height_field='h')\n    h = models.IntegerField()\n    class Meta: app_label = 'auth'\n\nclass NoneF(models.Model):\n    image = models.ImageField(upload_to='x')\n    class Meta: app_label = 'auth'\n\nfor M in (W, H, NoneF):\n    print(M.__name__, len(signals.post_init._live_receivers(M)[0]))\nEOF\npython /tmp/edge.py",
+    "observation": "W 1\nH 1\nNoneF 0\n"
+  },
+  {
+    "step": 16,
+    "thought": "The change is complete and verified:\n\n- **Root cause**: `ImageField.contribute_to_class` always connected `update_dimension_fields` to the `post_init` signal, even when neither `width_field` nor `height_field` was set. The handler then did nothing on every model instantiation.\n- **Fix**: Only connect the signal when `width_field` or `height_field` is provided (and the model isn't abstract).\n\nVerification:\n- No-dimension `ImageField` → 0 receivers (previously 1)\n- `width_field` only / `height_field` only / both → 1 receiver\n- Full `model_fields.test_imagefield` and `file_storage` suites: 229 tests pass.",
+    "action": "submit",
+    "observation": "Thank you for your work on this issue. Please carefully follow the steps below to help review your changes.\n\n1. If you made any changes to your code after running the reproduction script, please run the reproduction script again.\n  If the reproduction script is failing, please revisit your changes and make sure they are correct.\n  If you have already removed your reproduction script, please ignore this step.\n2. Remove your reproduction script (if you haven't done so already).\n3. If you have modified any TEST files, please revert them to the state they had before you started fixing the issue.\n  You can do this with `git checkout -- /path/to/test/file.py`. Use below <diff> to find the files you need to revert.\n4. Run the submit command again to confirm.\n\nHere is a list of all of your changes:\n\n<diff>\ndiff --git a/django/db/models/fields/files.py b/django/db/models/fields/files.py\nindex 7f8eb128e1..95985684ee 100644\n--- a/django/db/models/fields/files.py\n+++ b/django/db/models/fields/files.py\n@@ -441,7 +441,8 @@ class ImageField(FileField):\n         # after their corresponding image field don't stay cleared by\n         # Model.__init__, see bug #11196.\n         # Only run post-initialization dimension update on non-abstract models\n-        if not cls._meta.abstract:\n+        # with width_field/height_field.\n+        if not cls._meta.abstract and (self.width_field or self.height_field):\n             signals.post_init.connect(self.update_dimension_fields, sender=cls)\n \n     def update_dimension_fields(self, instance, force=False, *args, **kwargs):\n\n</diff>\n\n"
+  },
+  {
+    "step": 17,
+    "thought": "I've made the minimal source change. Let me clean up the temporary reproduction scripts (they're in `/tmp`, outside the repo) and confirm no test files were modified.",
+    "action": "cd /testbed && rm -f /tmp/repro.py /tmp/edge.py && git status",
+    "observation": "HEAD detached at 3b62d8c83e\nChanges to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n\tmodified:   django/db/models/fields/files.py\n\n"
+  },
+  {
+    "step": 18,
+    "thought": "",
+    "action": "submit",
+    "observation": "diff --git a/django/db/models/fields/files.py b/django/db/models/fields/files.py\nindex 7f8eb128e1..95985684ee 100644\n--- a/django/db/models/fields/files.py\n+++ b/django/db/models/fields/files.py\n@@ -441,7 +441,8 @@ class ImageField(FileField):\n         # after their corresponding image field don't stay cleared by\n         # Model.__init__, see bug #11196.\n         # Only run post-initialization dimension update on non-abstract models\n-        if not cls._meta.abstract:\n+        # with width_field/height_field.\n+        if not cls._meta.abstract and (self.width_field or self.height_field):\n             signals.post_init.connect(self.update_dimension_fields, sender=cls)\n \n     def update_dimension_fields(self, instance, force=False, *args, **kwargs):\n"
+  }
+]
