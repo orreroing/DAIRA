@@ -6,6 +6,8 @@
 
 **📊 Additional data prepared for the rebuttal are included in `traj/`.**
 
+**DeepSeek V3.2 multilingual results:** DAIRA resolves 86/129 tasks and SWE-agent resolves 75/129. Paired converted trajectories, patches, and the verified evaluation index are available in [the V3.2 artifact directory](traj/swebench_multilingual/deepseekv3.2_multilingual/).
+
 **🧩 DAIRA is now available as a standalone skill in `DAIRA_skill/`.**
 
 ## 📂 Repository Structure
