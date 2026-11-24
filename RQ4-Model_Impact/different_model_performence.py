@@ -1,12 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import os
+from pathlib import Path
 import seaborn as sns
 
 # 1. Settings and Paths
-save_dir = r"D:\issta26\DAIRA\result_image"
-if not os.path.exists(save_dir):
-    os.makedirs(save_dir)
+save_dir = Path(__file__).resolve().parents[1] / "result_image"
+save_dir.mkdir(exist_ok=True)
 
 # Set global theme for a clean look
 sns.set_theme(style="white", font_scale=1.0)
@@ -24,7 +23,7 @@ models = ['Qwen-3-Coder\nFlash', 'DeepSeek\nV3.2', 'Gemini 3\nFlash Preview']
 import pandas as pd
 
 # 1. 读取数据
-df = pd.read_excel(r'RQ2-Model_Impact\Different_model.xlsx')
+df = pd.read_excel(Path(__file__).with_name("Different_model.xlsx"))
 
 # 2. 辅助函数：从 '模型' 列中分离出 Agent 和 Model 名称
 def extract_agent_model(full_name):
@@ -145,7 +144,7 @@ ax1.legend(loc='upper left', frameon=True, fontsize=10)
 autolabel_with_change(ax1, rects1, rects2, is_cost=False)
 
 plt.tight_layout()
-out_path1 = os.path.join(save_dir, "Figure9(a).pdf")
+out_path1 = save_dir / "Figure9(a).pdf"
 plt.savefig(out_path1, bbox_inches='tight')
 print(f"Saved: {out_path1}")
 plt.show()
@@ -167,7 +166,7 @@ ax2.legend(loc='upper left', frameon=True, fontsize=10)
 autolabel_with_change(ax2, rects3, rects4, is_cost=True)
 
 plt.tight_layout()
-out_path2 = os.path.join(save_dir, "Figure9(b).pdf")
+out_path2 = save_dir / "Figure9(b).pdf"
 plt.savefig(out_path2, bbox_inches='tight')
 print(f"Saved: {out_path2}")
 plt.show()
